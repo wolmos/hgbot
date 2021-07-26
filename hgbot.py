@@ -1,9 +1,8 @@
 import pandas as pd
 from collections import defaultdict
-from time import sleep
-from datetime import date, datetime, timedelta
-import io
+from datetime import datetime, timedelta
 import config
+import db_access
 
 
 USER_STATES = defaultdict(int)
@@ -22,7 +21,7 @@ ENGINE = create_engine('postgresql://{}:{}@{}:{}/{}?sslmode=require'.format(
 
 
 # {username: {'group_id': , 'leader': , 'username': 'uid': (after first reaction from tg)}}
-USERS = select_leader_usernames(ENGINE)
+USERS = db_access.select_leader_usernames(ENGINE)
 USER_ID_MAP = {} # user_id: username
 
 def update_user_id(username, user_id):
@@ -41,7 +40,7 @@ def get_leader_members(username):
     group_id = USERS[username]['group_id']
     if group_id in MEMBERS:
         return MEMBERS[group_id]
-    members = select_group_members(group_id, ENGINE)
+    members = db_access.select_group_members(group_id, ENGINE)
     MEMBERS[group_id] = members
     return members
 
@@ -194,12 +193,12 @@ def respond_complete(bot, leader, user_id, call_id):
     print('Getting the DF')
     df = get_visitors_df(user_id)
     print('Saving the DF')
-    save_visitors_to_db(df, ENGINE)
+    db_access.save_visitors_to_db(df, ENGINE)
     #     cleanup(user_id)
     print('SAVED!')
     bot.answer_callback_query(call_id, 'Все члены отмечены!')
     set_user_mode(user_id, GUESTS)
-    guests = get_leader_guests(leader, ENGINE)
+    guests = db_access.get_leader_guests(leader, ENGINE)
     guests_markup = get_guests_markup(guests)
     bot.send_message(user_id,
                      'Переходим к добавлению гостей. Отправь в отдельных сообщениях имена новых гостей или выбери повторно посетивших из списка.',
@@ -253,7 +252,7 @@ def callback_query(call):
         if get_user_mode(user_id) == GUESTS:
             if call.data == 'FINISH_GUESTS':
                 guests_df = get_guests_df(user_id)
-                save_visitors_to_db(guests_df, ENGINE)
+                db_access.save_visitors_to_db(guests_df, ENGINE)
                 guests_text = '\n'.join([row['name'] for i, row in guests_df.iterrows()])
                 bot.answer_callback_query(call.id, 'Гости добавлены')
                 bot.send_message(user_id, 'Гости добавлены:\n\n{}'.format(guests_text),
