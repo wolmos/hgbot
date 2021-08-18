@@ -3,7 +3,9 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 import config
 import db_access
+from loguru import logger
 
+logger.add("debug.log", format="{time} {level} {message}", level="WARNING", rotation="3 MB", compression="zip")
 
 USER_STATES = defaultdict(int)
 DATE, MARK_VISITORS, GUESTS, TESTIMONIES, PREACHER = range(5)
@@ -16,8 +18,7 @@ DATES = defaultdict(None)
 
 from sqlalchemy import create_engine
 
-ENGINE = create_engine('postgresql://{}:{}@{}:{}/{}?sslmode=require'.format(
-    config.db_user, config.db_password, config.db_hostname, config.db_port, config.db_name))
+ENGINE = create_engine(f'postgresql://{config.db_user}:{config.db_password}@{config.db_hostname}:{config.db_port}/{config.db_name}?sslmode=require')
 
 
 # {username: {'group_id': , 'leader': , 'username': 'uid': (after first reaction from tg)}}
@@ -119,6 +120,7 @@ def parse_date(text):
             return visit_date
         except Exception as e:
             return None
+            logger.ERROR(e.message);
 
 
 def get_user_mode(user_id):
@@ -240,6 +242,7 @@ def respond_visitor_selection(bot, leader, user_id, call_id, call_data):
 
 #     except Exception as e:
 #         capture_exception(e)
+#         logger.ERROR(e.message);
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
@@ -272,6 +275,7 @@ def callback_query(call):
                 respond_visitor_selection(bot, leader, user_id, call.id, call.data)
     except Exception as e:
         capture_exception(e)
+        logger.ERROR(e.message);
 
 
 @bot.message_handler(func=check_user_group, commands=['add'])
@@ -287,6 +291,7 @@ def select_date(message):
                          'Выбери дату из списка или отправь дату в формате ДД/ММ (27/12)', reply_markup=dates_menu)
     except Exception as e:
         capture_exception(e)
+        logger.ERROR(e.message);
 
 
 @bot.message_handler(func=check_user_group)
@@ -318,6 +323,7 @@ def mark_visits(message):
             add_guest_vist(user_id, leader, message.text)
     except Exception as e:
         capture_exception(e)
+        logger.ERROR(e.message);
 
 
 bot.polling()

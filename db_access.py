@@ -6,7 +6,7 @@ VISITS_TABLE = 'data_from_bot_visitors'
 
 
 def select_leader_usernames(engine):
-    usernames_df = pd.read_sql('select * from {}'.format(USERNAMES_TABLE), engine)
+    usernames_df = pd.read_sql(f'select * from {USERNAMES_TABLE}', engine)
     users = {}
     for i, group in usernames_df.iterrows():
         for username in group.usernames.split(','):
@@ -20,7 +20,7 @@ def select_leader_usernames(engine):
 
 
 def select_group_members(group_id, engine):
-    members_df = pd.read_sql("select name from {} where id_hg = '{}'".format(VISITORS_TABLE, group_id), engine)
+    members_df = pd.read_sql(f"select name from {VISITORS_TABLE} where id_hg = '{group_id}'", engine)
     members = members_df['name'].tolist()
     return members
 
@@ -31,4 +31,4 @@ def save_visitors_to_db(df, engine):
 
 def get_leader_guests(leader, engine):
     return [m[0] for m in list(engine.execute(
-        "SELECT distinct(name) FROM {} WHERE type_person='Гость' AND name_leader='{}'".format(VISITS_TABLE, leader)))]
+        f"SELECT distinct(name) FROM {VISITS_TABLE} WHERE type_person='Гость' AND name_leader='{leader}'"))]
