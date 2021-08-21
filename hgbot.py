@@ -180,15 +180,17 @@ from sentry_sdk import capture_exception
 def respond_review(bot, leader, user_id, call_id):
     if group_members_checked(user_id):
         df = get_visitors_df(user_id)
-        review_text = '\n'.join([f'{row['name']}: {"✅" if row['status'] == '+' else "🚫"}'
+        review_text = '\n'.join([f'{row["name"]}: {"✅" if row["status"] == "+" else "🚫"}'
                                  for i, row in df.iterrows()])
+		#review_text = '\n'.join([f'{row["name"]}: {"✅" if row["status"] == '+' else "🚫"}'
+        #                         for i, row in df.iterrows()])
         bot.send_message(user_id,
                          f'Все члены отмечены, но ещё есть возможность изменить ответы:\n\n{review_text}',
                          reply_markup=get_review_markup())
     # bot.send_document(user_id, df)
     else:
         missing = get_missing_group_members(user_id)
-        bot.answer_callback_query(call_id, f'Ещё не все члены отмечены:\n{'\n'.join(missing)}')
+        bot.answer_callback_query(call_id, 'Ещё не все члены отмечены:\n' + "\n".join(missing))
 
 
 def respond_complete(bot, leader, user_id, call_id):
@@ -262,7 +264,7 @@ def callback_query(call):
                                  reply_markup=ReplyKeyboardRemove())
                 cleanup(user_id)
             elif call.data != "TITLE":
-                logger.info(f'Guest added: {call.data})
+                logger.info(f'Guest added: {call.data}')
                 bot.answer_callback_query(call.id, call.data)
                 add_guest_vist(user_id, leader, call.data)
         else:
@@ -284,7 +286,7 @@ def select_date(message):
         logger.info('Select Date')
         user_info = check_user_group(message)
         logger.info(user_info)
-        bot.reply_to(message, f'Привет! Ты — {user_info['leader']}, лидер группы {user_info['group_id']}.')
+        bot.reply_to(message, f'Привет! Ты — {user_info["leader"]}, лидер группы {user_info["group_id"]}.')
         dates_menu = get_dates_markup()
         set_user_mode(message.from_user.id, DATE)
         bot.send_message(message.from_user.id,
