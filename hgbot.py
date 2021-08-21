@@ -3,7 +3,9 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 import config
 import db_access
+from loguru import logger
 
+logger.add("debug.log", format="{time} {level} {message}", level="INFO", rotation="3 MB", compression="zip")
 
 USER_STATES = defaultdict(int)
 DATE, MARK_VISITORS, GUESTS, TESTIMONIES, PREACHER = range(5)
@@ -16,8 +18,7 @@ DATES = defaultdict(None)
 
 from sqlalchemy import create_engine
 
-ENGINE = create_engine('postgresql://{}:{}@{}:{}/{}?sslmode=require'.format(
-    config.db_user, config.db_password, config.db_hostname, config.db_port, config.db_name))
+ENGINE = create_engine(f'postgresql://{config.db_user}:{config.db_password}@{config.db_hostname}:{config.db_port}/{config.db_name}?sslmode=require')
 
 
 # {username: {'group_id': , 'leader': , 'username': 'uid': (after first reaction from tg)}}
@@ -66,7 +67,7 @@ def get_guests_markup(guests):
     markup = InlineKeyboardMarkup()
     for guest in guests:
         markup.row(InlineKeyboardButton(guest,  callback_data='TITLE'),
-                   InlineKeyboardButton("✅", callback_data="{}".format(guest)))
+                   InlineKeyboardButton("✅", callback_data=f"{guest}"))
     markup.row(InlineKeyboardButton('Завершить добавление гостей', callback_data='FINISH_GUESTS'))
     return markup
 
@@ -78,9 +79,9 @@ def get_review_markup():
 #     markup = InlineKeyboardMarkup()
 #     for member in members:
 #         markup.row(InlineKeyboardButton(member,  callback_data='TITLE'))
-#         markup.row(InlineKeyboardButton("✅", callback_data="{}: +".format(member)),
-#                    InlineKeyboardButton("🚫", callback_data="{}: -".format(member)),
-#                    InlineKeyboardButton("Удалить", callback_data="{}: remove".format(member)))
+#         markup.row(InlineKeyboardButton("✅", callback_data=f"{member}: +"),
+#                    InlineKeyboardButton("🚫", callback_data=f"{member}: -"),
+#                    InlineKeyboardButton("Удалить", callback_data=f"{member}: remove"))
 #     return markup
 
 def get_dates_markup():
@@ -119,6 +120,7 @@ def parse_date(text):
             return visit_date
         except Exception as e:
             return None
+            logger.error(e.message);
 
 
 def get_user_mode(user_id):
@@ -178,24 +180,24 @@ from sentry_sdk import capture_exception
 def respond_review(bot, leader, user_id, call_id):
     if group_members_checked(user_id):
         df = get_visitors_df(user_id)
-        review_text = '\n'.join(['{}: {}'.format(row['name'], "✅" if row['status'] == '+' else "🚫")
+        review_text = '\n'.join([f'{row['name']}: {"✅" if row['status'] == '+' else "🚫"}'
                                  for i, row in df.iterrows()])
         bot.send_message(user_id,
-                         'Все члены отмечены, но ещё есть возможность изменить ответы:\n\n{}'.format(review_text),
+                         f'Все члены отмечены, но ещё есть возможность изменить ответы:\n\n{review_text}',
                          reply_markup=get_review_markup())
     # bot.send_document(user_id, df)
     else:
         missing = get_missing_group_members(user_id)
-        bot.answer_callback_query(call_id, 'Ещё не все члены отмечены:\n{}'.format('\n'.join(missing)))
+        bot.answer_callback_query(call_id, f'Ещё не все члены отмечены:\n{'\n'.join(missing)}')
 
 
 def respond_complete(bot, leader, user_id, call_id):
-    print('Getting the DF')
+    logger.info('Getting the DF')
     df = get_visitors_df(user_id)
-    print('Saving the DF')
+    logger.info('Saving the DF')
     db_access.save_visitors_to_db(df, ENGINE)
     #     cleanup(user_id)
-    print('SAVED!')
+    logger.info('SAVED!')
     bot.answer_callback_query(call_id, 'Все члены отмечены!')
     set_user_mode(user_id, GUESTS)
     guests = db_access.get_leader_guests(leader, ENGINE)
@@ -207,13 +209,13 @@ def respond_complete(bot, leader, user_id, call_id):
 
 def respond_visitor_selection(bot, leader, user_id, call_id, call_data):
     name = call_data.split(':')[0]
-    print('Got them {}'.format(name))
+    logger.info(f'Got them {name}')
     if ': -' in call_data:
         VISITORS[user_id][name] = {'status': '-', 'leader': leader}
         bot.answer_callback_query(call_id, 'Укажи причину отсутсвия')
         reasons_menu = get_reasons_markup()
         ACTIVE_REASONS[user_id] = name
-        bot.send_message(user_id, 'Укажи причину отсутсвия {}'.format(name),
+        bot.send_message(user_id, f'Укажи причину отсутсвия {name}',
                          reply_markup=reasons_menu)
     else:
         bot.answer_callback_query(call_id, call_data)
@@ -231,21 +233,22 @@ def respond_visitor_selection(bot, leader, user_id, call_id, call_data):
 #             save_visitors_to_db(guests_df, ENGINE)
 #             guests_text = '\n'.join([row['name'] for i, row in guests_df.iterrows()])
 #             bot.answer_callback_query(call.id, 'Гости добавлены')
-#             bot.send_message(user_id, 'Гости добавлены:\n\n{}'.format(guests_text), reply_markup=ReplyKeyboardRemove())
+#             bot.send_message(user_id, f'Гости добавлены:\n\n{guests_text}', reply_markup=ReplyKeyboardRemove())
 #             cleanup(user_id)
 #         elif call.data != "TITLE":
-#             print('Guest added: {}'.format(call.data))
+#             logger.info('Guest added: {call.data}')
 #             bot.answer_callback_query(call.id, call.data)
 #             add_guest_vist(user_id, leader, call.data)
 
 #     except Exception as e:
 #         capture_exception(e)
+#         logger.error(e.message);
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
     try:
         user_id = call.from_user.id
-        print('[User {}] Button Click: {}, user mode {}'.format(user_id, call.data, get_user_mode(user_id)))
+        logger.info(f'[User {user_id}] Button Click: {call.data}, user mode {get_user_mode(user_id)}')
         user_info = check_user_group(call)
         leader = user_info['leader']
 
@@ -255,11 +258,11 @@ def callback_query(call):
                 db_access.save_visitors_to_db(guests_df, ENGINE)
                 guests_text = '\n'.join([row['name'] for i, row in guests_df.iterrows()])
                 bot.answer_callback_query(call.id, 'Гости добавлены')
-                bot.send_message(user_id, 'Гости добавлены:\n\n{}'.format(guests_text),
+                bot.send_message(user_id, f'Гости добавлены:\n\n{guests_text}',
                                  reply_markup=ReplyKeyboardRemove())
                 cleanup(user_id)
             elif call.data != "TITLE":
-                print('Guest added: {}'.format(call.data))
+                logger.info(f'Guest added: {call.data})
                 bot.answer_callback_query(call.id, call.data)
                 add_guest_vist(user_id, leader, call.data)
         else:
@@ -272,27 +275,29 @@ def callback_query(call):
                 respond_visitor_selection(bot, leader, user_id, call.id, call.data)
     except Exception as e:
         capture_exception(e)
+        logger.error(e.message);
 
 
 @bot.message_handler(func=check_user_group, commands=['add'])
 def select_date(message):
     try:
-        print('Select Date')
+        logger.info('Select Date')
         user_info = check_user_group(message)
-        print(user_info)
-        bot.reply_to(message, 'Привет! Ты — {}, лидер группы {}.'.format(user_info['leader'], user_info['group_id']))
+        logger.info(user_info)
+        bot.reply_to(message, f'Привет! Ты — {user_info['leader']}, лидер группы {user_info['group_id']}.')
         dates_menu = get_dates_markup()
         set_user_mode(message.from_user.id, DATE)
         bot.send_message(message.from_user.id,
                          'Выбери дату из списка или отправь дату в формате ДД/ММ (27/12)', reply_markup=dates_menu)
     except Exception as e:
         capture_exception(e)
+        logger.error(e.message);
 
 
 @bot.message_handler(func=check_user_group)
 def mark_visits(message):
     try:
-        print('Mark Visitors')
+        logger.info('Mark Visitors')
         user_info = check_user_group(message)
         leader = user_info['leader']
         user_id = message.from_user.id
@@ -303,9 +308,9 @@ def mark_visits(message):
         if get_user_mode(user_id) == DATE:
             if visit_date:
                 group_members = get_leader_members(username)
-                bot.send_message(user_id, 'Выбранная дата: {}'.format(visit_date), reply_markup=ReplyKeyboardRemove())
+                bot.send_message(user_id, f'Выбранная дата: {visit_date}', reply_markup=ReplyKeyboardRemove())
                 visit_menu = get_visit_markup(group_members)
-                bot.send_message(user_id, 'Отметь посещение за {}'.format(visit_date), reply_markup=visit_menu)
+                bot.send_message(user_id, f'Отметь посещение за {visit_date}', reply_markup=visit_menu)
                 set_user_mode(user_id, MARK_VISITORS)
                 DATES[user_id] = visit_date
             else:
@@ -314,10 +319,11 @@ def mark_visits(message):
         elif get_user_mode(user_id) == MARK_VISITORS:
             VISITORS[user_id][ACTIVE_REASONS[user_id]]['reason'] = message.text
         elif get_user_mode(user_id) == GUESTS:
-            bot.send_message(user_id, 'Добавлен гость {}'.format(message.text))
+            bot.send_message(user_id, f'Добавлен гость {message.text}')
             add_guest_vist(user_id, leader, message.text)
     except Exception as e:
         capture_exception(e)
+        logger.error(e.message);
 
 
 bot.polling()
