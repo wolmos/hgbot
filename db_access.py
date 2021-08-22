@@ -11,11 +11,11 @@ def select_leader_usernames(engine):
     for i, group in usernames_df.iterrows():
         for username in group.usernames.split(','):
             username_no_handle = username.replace('@', '')
-            user_info = {'username': username_no_handle,
-                         'group_id': group['id_hg'],
-                         'leader': group['leader']}
             if username_no_handle:
+                user_info = users.get(username_no_handle, {'user_id': None, 'username': username_no_handle, 'hgs': []})
+                user_info['hgs'].append({'group_id': group['id_hg'], 'leader': group['leader']})
                 users[username_no_handle] = user_info
+
     return users
 
 
@@ -32,3 +32,8 @@ def save_visitors_to_db(df, engine):
 def get_leader_guests(leader, engine):
     return [m[0] for m in list(engine.execute(
         f"SELECT distinct(name) FROM {VISITS_TABLE} WHERE type_person='Гость' AND name_leader='{leader}'"))]
+
+
+def get_group_guests(group_id, engine):
+    return [m[0] for m in list(engine.execute(
+        f"SELECT distinct(name) FROM {VISITS_TABLE} WHERE type_person='Гость' AND id_hg='{group_id}'"))]
