@@ -3,6 +3,7 @@ import pandas as pd
 VISITORS_TABLE = 'data_for_bot_visitors'
 USERNAMES_TABLE = 'data_for_bot_usernames'
 VISITS_TABLE = 'data_from_bot_visitors'
+QUESTIONS_TABLE = 'data_from_bot_questions'
 
 
 def select_leader_usernames(engine):
@@ -27,6 +28,10 @@ def select_group_members(group_id, engine):
 
 def save_visitors_to_db(df, engine):
     df.to_sql(VISITS_TABLE, engine, if_exists='append', index=None)
+
+
+def save_questions_to_db(df, engine):
+    df.to_sql(QUESTIONS_TABLE, engine, if_exists='append', index=None)
 
 
 def get_leader_guests(leader, engine):

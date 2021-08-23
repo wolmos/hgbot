@@ -10,7 +10,7 @@ logger.add("debug.log", format="{time} {level} {message}", level="INFO", rotatio
 
 # States from certain range. States are kept in memory, lost if bot if restarted!
 USER_STATES = defaultdict(int)
-SELECT_GROUP, DATE, MARK_VISITORS, GUESTS, TESTIMONIES, PREACHER = range(6)
+SELECT_GROUP, DATE, MARK_VISITORS, GUESTS, HG_SUMMARY, HG_SUMMARY_CONFIRM, TESTIMONIES, PREACHER = range(8)
 
 # For each user, the current group he is working on (one user can edit different groups)
 USER_CURRENT_GROUPS = defaultdict(int)
@@ -20,6 +20,7 @@ VISITORS = defaultdict(dict)
 GUEST_VISITORS = defaultdict(list)
 ACTIVE_REASONS = defaultdict(None)
 DATES = defaultdict(None)
+SUMMARY = defaultdict(None)
 
 
 ENGINE = create_engine(f'postgresql://{config.db_user}:{config.db_password}@{config.db_hostname}:{config.db_port}/{config.db_name}?sslmode=require')
@@ -157,6 +158,12 @@ def get_reasons_markup():
     return reasons_menu
 
 
+def get_confirm_hg_summary_markup():
+    markup = InlineKeyboardMarkup()
+    markup.row(InlineKeyboardButton('Да, все верно', callback_data='YES'), InlineKeyboardButton('Нет, хочу исправить', callback_data='NO'))
+    return markup
+
+
 DATES = {'Сегодня': (lambda : datetime.now().date()),
          'Вчера': (lambda : datetime.now().date() - timedelta(days=1)),
          'Позавчера': (lambda : datetime.now().date() - timedelta(days=2))}
@@ -198,8 +205,27 @@ def get_guests_df(user_id):
     return df
 
 
+def get_questions_df(user_id):
+    username = USER_ID_MAP[user_id]
+    group_id = USER_CURRENT_GROUPS[username]
+    user_info = USERS[username]
+    hg_info = list(filter(lambda cur_hg_info: cur_hg_info['group_id'] == group_id, user_info['hgs']))[0]
+    
+    df = pd.DataFrame([{
+                        'name_leader': hg_info['leader'],
+                        'id_hg': group_id[:7],
+                        'date': DATES[user_id],
+                        'summary': SUMMARY[user_id]
+                      }])
+    return df
+
+
 def add_guest_vist(user_id, leader, guest):
     GUEST_VISITORS[user_id].append({'status': '+', 'leader': leader, 'guest': True, 'name': guest})
+
+
+def add_summary(user_id, hg_info, summary):
+    SUMMARY[user_id] = summary
 
 
 def group_members_checked(user_id):
@@ -218,6 +244,7 @@ def cleanup(user_id):
     ACTIVE_REASONS[user_id] = None
     DATES[user_id] = None
     USER_CURRENT_GROUPS[user_id] = None
+    SUMMARY[user_id] = None
     set_user_mode(user_id, DATE)
 
 
@@ -231,6 +258,7 @@ def respond_review(bot, leader, user_id, call_id):
         bot.send_message(user_id,
                          f'Все члены отмечены, но ещё есть возможность изменить ответы:\n\n{review_text}',
                          reply_markup=get_review_markup())
+        bot.answer_callback_query(call_id)
     # bot.send_document(user_id, df)
     else:
         missing = get_missing_group_members(user_id)
@@ -251,6 +279,7 @@ def respond_complete(bot, group_id, user_id, call_id):
     bot.send_message(user_id,
                      'Переходим к добавлению гостей. Отправь в отдельных сообщениях имена новых гостей или выбери повторно посетивших из списка.',
                      reply_markup=guests_markup)
+    bot.answer_callback_query(call_id)
 
 
 def respond_visitor_selection(bot, leader, user_id, call_id, call_data):
@@ -266,6 +295,20 @@ def respond_visitor_selection(bot, leader, user_id, call_id, call_data):
     else:
         bot.answer_callback_query(call_id, call_data)
         VISITORS[user_id][name] = {'status': '+', 'leader': leader}
+
+
+def respond_hg_summary(user_id, call_id):
+    set_user_mode(user_id, HG_SUMMARY)
+    bot.send_message(user_id, 'Опиши тему группы (3-4 тезиса)')
+    bot.answer_callback_query(call_id)
+
+
+def respond_confirm_hg_summary(user_id, call_id=None):
+    set_user_mode(user_id, HG_SUMMARY_CONFIRM)
+    confirm_hg_summary_markup = get_confirm_hg_summary_markup()
+    bot.send_message(user_id, 'Тема группы указана правильно?', reply_markup=confirm_hg_summary_markup)
+    if call_id is not None:
+        bot.answer_callback_query(call_id)
 
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -287,17 +330,29 @@ def callback_query(call):
                 bot.answer_callback_query(call.id, 'Гости добавлены')
                 bot.send_message(user_id, f'Гости добавлены:\n\n{guests_text}',
                                  reply_markup=ReplyKeyboardRemove())
-                cleanup(user_id)
+                respond_hg_summary(user_id, call.id)
+                #cleanup(user_id)
             elif call.data != "TITLE":
                 logger.info(f'Guest added: {call.data}')
                 bot.answer_callback_query(call.id, call.data)
                 add_guest_vist(user_id, leader, call.data)
+        #elif get_user_mode(user_id) == HG_SUMMARY:
+        #skip summary button click
+        elif get_user_mode(user_id) == HG_SUMMARY_CONFIRM:
+            if call.data == 'YES':
+                questions_df = get_questions_df(user_id)
+                db_access.save_questions_to_db(questions_df, ENGINE)
+                logger.info(f'Saved hg summary: {SUMMARY[user_id]}')
+                bot.answer_callback_query(call.id, f'Saved hg summary: {SUMMARY[user_id]}')
+            elif call.data == 'NO':
+                respond_hg_summary(user_id, call.id)
         else:
             if call.data == 'REVIEW':
                 # bot.edit_message(user_id, reply_markup=ReplyKeyboardRemove())
                 respond_review(bot, leader, user_id, call.id)
             elif call.data == 'COMPLETE_VISITORS':
                 respond_complete(bot, group_id, user_id, call.id)
+            # should not fall here if wrong user mode
             elif call.data != "TITLE":
                 respond_visitor_selection(bot, leader, user_id, call.id, call.data)
     except Exception as e:
@@ -348,11 +403,13 @@ def select_date(message):
         logger.error(e);
 
 
+# method not only marks visits
 @bot.message_handler(func=check_user_group)
 def mark_visits(message):
     try:
-        logger.info('Mark Visitors')
         user_id = message.from_user.id
+        user_mode = get_user_mode(user_id)
+        logger.info(f'[User {user_id}] Handling inbound message. State = {user_mode}')
         user_info = check_user_group(message)
         username = user_info['username']
         group_id = get_current_group_id(user_id)
@@ -360,9 +417,9 @@ def mark_visits(message):
         leader = hg_info['leader']
 
         update_user_id(username, user_id)
-        visit_date = parse_date(message.text)
 
-        if get_user_mode(user_id) == DATE:
+        if user_mode == DATE:
+            visit_date = parse_date(message.text)
             if visit_date:
                 group_members = get_members(group_id)
                 bot.send_message(user_id, f'Выбранная дата: {visit_date}', reply_markup=ReplyKeyboardRemove())
@@ -373,11 +430,14 @@ def mark_visits(message):
             else:
                 select_date(message)
 
-        elif get_user_mode(user_id) == MARK_VISITORS:
+        elif user_mode == MARK_VISITORS:
             VISITORS[user_id][ACTIVE_REASONS[user_id]]['reason'] = message.text
-        elif get_user_mode(user_id) == GUESTS:
+        elif user_mode == GUESTS:
             bot.send_message(user_id, f'Добавлен гость {message.text}')
             add_guest_vist(user_id, leader, message.text)
+        elif user_mode == HG_SUMMARY:
+            add_summary(user_id, hg_info, message.text)
+            respond_confirm_hg_summary(user_id)
     except Exception as e:
         capture_exception(e)
         logger.error(e);
