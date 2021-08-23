@@ -217,6 +217,7 @@ def cleanup(user_id):
     GUEST_VISITORS[user_id] = []
     ACTIVE_REASONS[user_id] = None
     DATES[user_id] = None
+    USER_CURRENT_GROUPS[user_id] = None
     set_user_mode(user_id, DATE)
 
 
@@ -304,11 +305,13 @@ def callback_query(call):
         logger.error(e);
 
 
+# Starting point of bot
 @bot.message_handler(func=check_user_group, commands=['add'])
 def select_group(message):
     try:
         logger.info('Select Group')
         user_id = message.from_user.id
+        cleanup(user_id)
         user_info = check_user_group(message)
         username = user_info['username']
         logger.info(user_info)
