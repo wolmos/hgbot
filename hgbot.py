@@ -5,6 +5,8 @@ import config
 import db_access
 from loguru import logger
 from sqlalchemy import create_engine
+from sqlalchemy.exc import IntegrityError
+
 
 logger.add("debug.log", format="{time} {level} {message}", level="INFO", rotation="3 MB", compression="zip")
 
@@ -38,6 +40,7 @@ from sentry_sdk import capture_exception
 # {username: {'group_id': , 'leader': , 'username': 'uid': (after first reaction from tg)}}
 USERS = db_access.select_leader_usernames(ENGINE)
 USER_ID_MAP = {} # user_id: username
+GROUP_ICONS = ['🍏', '🍒', '🍉', '🍍', '🥥', '🍑', '🍇', '🫑', '🥝', '🍋']
 
 
 #================HELPER METHODS================
@@ -81,6 +84,10 @@ def get_current_group_id(user_id):
     return USER_CURRENT_GROUPS[username]
 
 
+def get_group_info(user_info, group_id):
+    return list(filter(lambda cur_info: cur_info['group_id'] == group_id, user_info['hgs']))[0]
+
+
 def parse_date(text):
     if text in DATES:
         return DATES[text]()
@@ -90,8 +97,8 @@ def parse_date(text):
             visit_date = visit_date.replace(year=2021)
             return visit_date
         except Exception as e:
+            logger.error(e)
             return None
-            logger.error(e);
 
 
 def get_user_mode(user_id):
@@ -108,8 +115,8 @@ def get_visit_markup(members):
     markup = InlineKeyboardMarkup()
     for member in members:
         markup.row(InlineKeyboardButton(member,  callback_data='TITLE'))
-        markup.row(InlineKeyboardButton("✅", callback_data="{}: +".format(member)),
-                   InlineKeyboardButton("🚫", callback_data="{}: -".format(member)))
+        markup.row(InlineKeyboardButton(f"✅", callback_data="{}: +".format(member)),
+                   InlineKeyboardButton(f"🚫", callback_data="{}: -".format(member)))
     markup.row(InlineKeyboardButton('Подтвердить отметки', callback_data='REVIEW'))
 #     markup.row(InlineKeyboardButton('Добавить гостя', callback_data='ADD_GUEST'))
     return markup
@@ -126,35 +133,37 @@ def get_guests_markup(guests):
 
 def get_review_markup():
     markup = InlineKeyboardMarkup()
-    markup.row(InlineKeyboardButton('Всё верно', callback_data='COMPLETE_VISITORS'))
+    markup.row(InlineKeyboardButton('Все верно', callback_data='COMPLETE_VISITORS'))
     return markup
-# def get_guests_markup(members):
-#     markup = InlineKeyboardMarkup()
-#     for member in members:
-#         markup.row(InlineKeyboardButton(member,  callback_data='TITLE'))
-#         markup.row(InlineKeyboardButton("✅", callback_data=f"{member}: +"),
-#                    InlineKeyboardButton("🚫", callback_data=f"{member}: -"),
-#                    InlineKeyboardButton("Удалить", callback_data=f"{member}: remove"))
-#     return markup
+
 
 def get_dates_markup():
     dates_menu = ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-    dates_menu.row('Позавчера')
-    dates_menu.row('Вчера')
-    dates_menu.row('Сегодня')
+    dates_menu.row('⏪ Позавчера')
+    dates_menu.row('◀️ Вчера')
+    dates_menu.row('✔️ Сегодня')
     return dates_menu
 
 
 def get_groups_markup(group_ids):
     menu = ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+
+    # assign quasi-random fruit to each group
     for group_id in group_ids:
-        menu.add(KeyboardButton(f'Группа: {group_id}'))
+        icon = GROUP_ICONS[ord(group_id[-1]) % 10]
+        menu.add(KeyboardButton(f'{icon} Группа: {group_id}'))
     return menu
 
 
 def get_reasons_markup():
     reasons_menu = ReplyKeyboardMarkup(one_time_keyboard=True)
-    [reasons_menu.row(r) for r in REASONS]
+
+    reasons_menu.row(REASONS['work'][1], REASONS['family'][1])
+    reasons_menu.row(REASONS['church'][1])
+    reasons_menu.row(REASONS['illness'][1], REASONS['vacation'][1])
+    reasons_menu.row(REASONS['forgot'][1], REASONS['unknown'][1])
+    reasons_menu.row(REASONS['delete'][1])
+
     return reasons_menu
 
 
@@ -164,18 +173,21 @@ def get_confirm_hg_summary_markup():
     return markup
 
 
-DATES = {'Сегодня': (lambda : datetime.now().date()),
-         'Вчера': (lambda : datetime.now().date() - timedelta(days=1)),
-         'Позавчера': (lambda : datetime.now().date() - timedelta(days=2))}
+DATES = {'✔️ Сегодня': (lambda : datetime.now().date()),
+         '◀️ Вчера': (lambda : datetime.now().date() - timedelta(days=1)),
+         '⏪ Позавчера': (lambda : datetime.now().date() - timedelta(days=2))}
 
 
-REASONS = ['Работа / Учеба',
-            'Семейные обстоятельства',
-            'Болезнь',
-            'Встреча по служению в церкви / Был на другой ДГ',
-            'Отпуск / Был в другом городе',
-            'Не захотел прийти/Забыл',
-            'Удалить человека']
+# key = some code, value = (message for DB, display message)
+REASONS = {'work':     ('Работа / Учеба', '💼 Работа / Учеба'),
+           'family':   ('Семейные обстоятельства', '🚼 Семейные обстоятельства'),
+           'illness':  ('Болезнь', '🩺 Болезнь'),
+           'church':   ('Встреча по служению в церкви / Был на другой ДГ', '🦸 Встреча по служению в церкви / Был на другой ДГ'),
+           'vacation': ('Отпуск / Был в другом городе', '✈️ Отпуск / Был в другом городе'),
+           'forgot':   ('Не захотел прийти / Забыл', '🙈 Не захотел прийти / Забыл'),
+           'unknown':  ('Не удалось выяснить причину', '🤷 Не удалось выяснить причину'),
+           'delete':   ('Удалить человека', '🚫 Удалить человека')
+           }
 
 
 def get_visitors_df(user_id):
@@ -207,12 +219,12 @@ def get_guests_df(user_id):
 
 def get_questions_df(user_id):
     username = USER_ID_MAP[user_id]
-    group_id = USER_CURRENT_GROUPS[username]
     user_info = USERS[username]
-    hg_info = list(filter(lambda cur_hg_info: cur_hg_info['group_id'] == group_id, user_info['hgs']))[0]
+    group_id = USER_CURRENT_GROUPS[username]
+    group_info = get_group_info(user_info, group_id)
     
     df = pd.DataFrame([{
-                        'name_leader': hg_info['leader'],
+                        'name_leader': group_info['leader'],
                         'id_hg': group_id[:7],
                         'date': DATES[user_id],
                         'summary': SUMMARY[user_id]
@@ -224,7 +236,7 @@ def add_guest_vist(user_id, leader, guest):
     GUEST_VISITORS[user_id].append({'status': '+', 'leader': leader, 'guest': True, 'name': guest})
 
 
-def add_summary(user_id, hg_info, summary):
+def add_summary(user_id, group_info, summary):
     SUMMARY[user_id] = summary
 
 
@@ -250,6 +262,19 @@ def cleanup(user_id):
 
 #================WORKING WITH BOT================
 
+def respond_select_date(bot, user_id, username, group_id):
+    update_user_current_group(username, group_id)
+    user_info = USERS[username]
+    group_info = get_group_info(user_info, group_id)
+    #bot.reply_to(message, f'Привет! Ты — {group_info["leader"]}, лидер группы {group_info["group_id"]}.')
+
+    dates_menu = get_dates_markup()
+    set_user_mode(user_id, DATE)
+    bot.send_message(user_id,
+                 f'Привет! Ты — {group_info["leader"]}, лидер группы {group_info["group_id"]}. '\
+                 'Выбери дату из списка или отправь дату в формате ДД/ММ (27/12)', reply_markup=dates_menu)
+
+
 def respond_review(bot, leader, user_id, call_id):
     if group_members_checked(user_id):
         df = get_visitors_df(user_id)
@@ -262,7 +287,7 @@ def respond_review(bot, leader, user_id, call_id):
     # bot.send_document(user_id, df)
     else:
         missing = get_missing_group_members(user_id)
-        bot.answer_callback_query(call_id, 'Ещё не все члены отмечены:\n' + "\n".join(missing))
+        bot.answer_callback_query(call_id, 'Ещё не все члены отмечены: ' + ", ".join(missing))
 
 
 def respond_complete(bot, group_id, user_id, call_id):
@@ -287,7 +312,7 @@ def respond_visitor_selection(bot, leader, user_id, call_id, call_data):
     logger.info(f'Got them {name}')
     if ': -' in call_data:
         VISITORS[user_id][name] = {'status': '-', 'leader': leader}
-        bot.answer_callback_query(call_id, 'Укажи причину отсутсвия')
+        bot.answer_callback_query(call_id, 'Укажи причину отсутствия')
         reasons_menu = get_reasons_markup()
         ACTIVE_REASONS[user_id] = name
         bot.send_message(user_id, f'Укажи причину отсутсвия {name}',
@@ -299,28 +324,29 @@ def respond_visitor_selection(bot, leader, user_id, call_id, call_data):
 
 def respond_hg_summary(user_id, call_id):
     set_user_mode(user_id, HG_SUMMARY)
-    bot.send_message(user_id, 'Опиши тему группы (3-4 тезиса)')
+    bot.send_message(user_id, 'Опиши, о чем была духовная часть (3–4 тезиса)')
     bot.answer_callback_query(call_id)
 
 
 def respond_confirm_hg_summary(user_id, call_id=None):
     set_user_mode(user_id, HG_SUMMARY_CONFIRM)
     confirm_hg_summary_markup = get_confirm_hg_summary_markup()
-    bot.send_message(user_id, 'Тема группы указана правильно?', reply_markup=confirm_hg_summary_markup)
+    bot.send_message(user_id, 'Духовная часть указана правильно?', reply_markup=confirm_hg_summary_markup)
     if call_id is not None:
         bot.answer_callback_query(call_id)
 
 
+# Handles all clicks on inline buttons
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
     try:
         user_id = call.from_user.id
-        logger.info(f'[User {user_id}] Button Click: {call.data}, user mode {get_user_mode(user_id)}')
         user_info = check_user_group(call)
-        group_id = get_current_group_id(user_id)
+        logger.info(f'[User {user_id} (@{user_info["username"]})] Button Click: {call.data}, user mode {get_user_mode(user_id)}')
 
-        hg_info = list(filter(lambda cur_hg_info: cur_hg_info['group_id'] == group_id, user_info['hgs']))[0]
-        leader = hg_info['leader']
+        group_id = get_current_group_id(user_id)
+        group_info = get_group_info(user_info, group_id)
+        leader = group_info['leader']
 
         if get_user_mode(user_id) == GUESTS:
             if call.data == 'FINISH_GUESTS':
@@ -355,66 +381,76 @@ def callback_query(call):
             # should not fall here if wrong user mode
             elif call.data != "TITLE":
                 respond_visitor_selection(bot, leader, user_id, call.id, call.data)
+    except IntegrityError as e:
+        logger.error(e);
+        bot.answer_callback_query(call.id, 'Произошла ошибка. Нам очень жаль 😔')
+        bot.send_message(user_id, f'Данные для группы {group_id} за дату {DATES[user_id]} уже были внесены', reply_markup=ReplyKeyboardRemove())
     except Exception as e:
         capture_exception(e)
         logger.error(e);
+        bot.answer_callback_query(call.id, 'Произошла ошибка. Нам очень жаль 😔')
 
 
 # Starting point of bot
 @bot.message_handler(func=check_user_group, commands=['add'])
 def select_group(message):
     try:
-        logger.info('Select Group')
         user_id = message.from_user.id
         cleanup(user_id)
         user_info = check_user_group(message)
         username = user_info['username']
-        logger.info(user_info)
-        group_ids = map(lambda x: x['group_id'], user_info['hgs'])
-        groups_menu = get_groups_markup(group_ids)
-        set_user_mode(message.from_user.id, SELECT_GROUP)
+        logger.info(f'[User {user_id} (@{username})] Select Group')
+
         update_user_id(username, user_id)
-        bot.send_message(message.from_user.id, 'Привет! Выбери, пожалуйста, группу.', reply_markup=groups_menu)
+        logger.info(f'User groups: {user_info["hgs"]}')
+        group_ids = list(map(lambda x: x['group_id'], user_info['hgs']))
+        if len(group_ids) > 1:
+            set_user_mode(user_id, SELECT_GROUP)
+            groups_menu = get_groups_markup(group_ids)
+            bot.send_message(user_id, 'Привет! Выбери, пожалуйста, группу.', reply_markup=groups_menu)
+        else:
+            # if only one group is present, select it and go to select date
+            respond_select_date(bot, user_id, username, group_ids[0])
     except Exception as e:
         capture_exception(e)
         logger.error(e);
 
 
-@bot.message_handler(func=check_user_group, regexp='^Группа: ')
+@bot.message_handler(func=check_user_group, regexp='Группа: ')
 def select_date(message):
     try:
-        logger.info('Select Date')
-        group_id = message.text.replace('Группа: ', '')
-        print(f'Requested to work with group id {group_id}')
         user_id = message.from_user.id
         user_info = check_user_group(message)
         username = user_info['username']
-        update_user_current_group(username, group_id)
+        logger.info(f'[User {user_id} (@{username})] Select Date')
         update_user_id(username, user_id)
-        hg_info = list(filter(lambda cur_hg_info: cur_hg_info['group_id'] == group_id, user_info['hgs']))[0]
-        #bot.reply_to(message, f'Привет! Ты — {hg_info["leader"]}, лидер группы {hg_info["group_id"]}.')
-        dates_menu = get_dates_markup()
-        set_user_mode(message.from_user.id, DATE)
-        bot.send_message(message.from_user.id,
-                     f'Привет! Ты — {hg_info["leader"]}, лидер группы {hg_info["group_id"]}. '\
-                     'Выбери дату из списка или отправь дату в формате ДД/ММ (27/12)', reply_markup=dates_menu)
+        group_id = message.text.replace('Группа: ', '')
+        if group_id[0] in GROUP_ICONS and group_id[1] == ' ':
+            group_id = group_id[2:] # remove emoji
+        group_ids = map(lambda x: x['group_id'], user_info['hgs'])
+        if not group_id in group_ids:
+            bot.reply_to(message, f'Ошибка в номере группы {group_id}, попробуй ввести еще раз')
+            return
+        print(f'Requested to work with group id {group_id}')
+        respond_select_date(bot, user_id, username, group_id)
+
     except Exception as e:
         capture_exception(e)
         logger.error(e);
 
 
-# method not only marks visits
 @bot.message_handler(func=check_user_group)
-def mark_visits(message):
+def handle_generic_messages(message):
     try:
         user_id = message.from_user.id
-        user_mode = get_user_mode(user_id)
-        logger.info(f'[User {user_id}] Handling inbound message. State = {user_mode}')
         user_info = check_user_group(message)
         username = user_info['username']
+        user_mode = get_user_mode(user_id)
+        logger.info(f'[User {user_id} (@{username})] Handling inbound message. State = {user_mode}')
+
         group_id = get_current_group_id(user_id)
-        hg_info = list(filter(lambda cur_hg_info: cur_hg_info['group_id'] == group_id, user_info['hgs']))[0]
-        leader = hg_info['leader']
+        group_info = get_group_info(user_info, group_id)
+        leader = group_info['leader']
 
         update_user_id(username, user_id)
 
@@ -431,12 +467,13 @@ def mark_visits(message):
                 select_date(message)
 
         elif user_mode == MARK_VISITORS:
+            reason_for_db = list(filter(lambda reason: reason[1] == message.text, REASONS.values()))[0][0]
             VISITORS[user_id][ACTIVE_REASONS[user_id]]['reason'] = message.text
         elif user_mode == GUESTS:
             bot.send_message(user_id, f'Добавлен гость {message.text}')
             add_guest_vist(user_id, leader, message.text)
         elif user_mode == HG_SUMMARY:
-            add_summary(user_id, hg_info, message.text)
+            add_summary(user_id, group_info, message.text)
             respond_confirm_hg_summary(user_id)
     except Exception as e:
         capture_exception(e)
