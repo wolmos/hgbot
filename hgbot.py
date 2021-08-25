@@ -12,7 +12,7 @@ logger.add("debug.log", format="{time} {level} {message}", level="INFO", rotatio
 
 # States from certain range. States are kept in memory, lost if bot if restarted!
 USER_STATES = defaultdict(int)
-SELECT_GROUP, DATE, MARK_VISITORS, GUESTS, HG_SUMMARY, HG_SUMMARY_CONFIRM, TESTIMONIES, PREACHER = range(8)
+SELECT_GROUP, DATE, MARK_VISITORS, GUESTS, HG_SUMMARY, HG_SUMMARY_CONFIRM, TESTIMONIES, PREACHER, DISTRIBUTED_PEOPLE, DISTRIBUTED_PEOPLE_INPUT, DISTRIBUTED_PEOPLE_CONFIRM, FINISH_ALL = range(12)
 
 # For each user, the current group he is working on (one user can edit different groups)
 USER_CURRENT_GROUPS = defaultdict(int)
@@ -23,6 +23,7 @@ GUEST_VISITORS = defaultdict(list)
 ACTIVE_REASONS = defaultdict(None)
 DATES = defaultdict(None)
 SUMMARY = defaultdict(None)
+DISTRIBUTED_PEOPLE_FEEDBACK = defaultdict(None)
 
 
 ENGINE = create_engine(f'postgresql://{config.db_user}:{config.db_password}@{config.db_hostname}:{config.db_port}/{config.db_name}?sslmode=require')
@@ -167,9 +168,15 @@ def get_reasons_markup():
     return reasons_menu
 
 
-def get_confirm_hg_summary_markup():
+def get_confirm_yes_no_markup():
     markup = InlineKeyboardMarkup()
     markup.row(InlineKeyboardButton('Да, все верно', callback_data='YES'), InlineKeyboardButton('Нет, хочу исправить', callback_data='NO'))
+    return markup
+
+
+def get_distributed_people_markup():
+    markup = InlineKeyboardMarkup()
+    markup.row(InlineKeyboardButton('Рассказать', callback_data='YES'), InlineKeyboardButton('Таких людей нет', callback_data='NO'))
     return markup
 
 
@@ -227,7 +234,8 @@ def get_questions_df(user_id):
                         'name_leader': group_info['leader'],
                         'id_hg': group_id[:7],
                         'date': DATES[user_id],
-                        'summary': SUMMARY[user_id]
+                        'summary': SUMMARY[user_id],
+                        'distributed_people_feedback': DISTRIBUTED_PEOPLE_FEEDBACK[user_id]
                       }])
     return df
 
@@ -238,6 +246,10 @@ def add_guest_vist(user_id, leader, guest):
 
 def add_summary(user_id, group_info, summary):
     SUMMARY[user_id] = summary
+
+
+def add_distributed_people(user_id, feedback):
+    DISTRIBUTED_PEOPLE_FEEDBACK[user_id] = feedback
 
 
 def group_members_checked(user_id):
@@ -257,6 +269,7 @@ def cleanup(user_id):
     DATES[user_id] = None
     USER_CURRENT_GROUPS[user_id] = None
     SUMMARY[user_id] = None
+    DISTRIBUTED_PEOPLE_FEEDBACK[user_id] = None
     set_user_mode(user_id, DATE)
 
 
@@ -315,7 +328,7 @@ def respond_visitor_selection(bot, leader, user_id, call_id, call_data):
         bot.answer_callback_query(call_id, 'Укажи причину отсутствия')
         reasons_menu = get_reasons_markup()
         ACTIVE_REASONS[user_id] = name
-        bot.send_message(user_id, f'Укажи причину отсутсвия {name}',
+        bot.send_message(user_id, f'Укажи причину отсутствия {name}',
                          reply_markup=reasons_menu)
     else:
         bot.answer_callback_query(call_id, call_data)
@@ -330,10 +343,33 @@ def respond_hg_summary(user_id, call_id):
 
 def respond_confirm_hg_summary(user_id, call_id=None):
     set_user_mode(user_id, HG_SUMMARY_CONFIRM)
-    confirm_hg_summary_markup = get_confirm_hg_summary_markup()
+    confirm_hg_summary_markup = get_confirm_yes_no_markup()
     bot.send_message(user_id, 'Духовная часть указана правильно?', reply_markup=confirm_hg_summary_markup)
     if call_id is not None:
         bot.answer_callback_query(call_id)
+
+
+def respond_distributed_people(user_id):
+    set_user_mode(user_id, DISTRIBUTED_PEOPLE)
+    distributed_people_markup = get_distributed_people_markup()
+    bot.send_message(user_id, 'Если у тебя есть люди, которых тебе распределили вышестоящие лидеры — расскажи, какая ситуация с ними?',
+            reply_markup=distributed_people_markup)
+
+
+def respond_input_distributed_people(user_id):
+    set_user_mode(user_id, DISTRIBUTED_PEOPLE_INPUT)
+    bot.send_message(user_id, 'Опиши, пожалуйста, ситуацию вкратце')
+
+
+def respond_confirm_distributed_people(user_id):
+    set_user_mode(user_id, DISTRIBUTED_PEOPLE_CONFIRM)
+    confirm_distributed_people_markup = get_confirm_yes_no_markup()
+    bot.send_message(user_id, 'Ситуация с распределенными людьми описана правильно?', reply_markup=confirm_distributed_people_markup)
+
+
+def respond_finish(user_id):
+    set_user_mode(user_id, FINISH_ALL)
+    bot.send_message(user_id, f'Спасибо! Так классно, что ты вовремя заполняешь отчет! 🙌', reply_markup=ReplyKeyboardRemove())
 
 
 # Handles all clicks on inline buttons
@@ -342,13 +378,14 @@ def callback_query(call):
     try:
         user_id = call.from_user.id
         user_info = check_user_group(call)
-        logger.info(f'[User {user_id} (@{user_info["username"]})] Button Click: {call.data}, user mode {get_user_mode(user_id)}')
+        user_mode = get_user_mode(user_id)
+        logger.info(f'[User {user_id} (@{user_info["username"]})] Button Click: {call.data}, user mode {user_mode}')
 
         group_id = get_current_group_id(user_id)
         group_info = get_group_info(user_info, group_id)
         leader = group_info['leader']
 
-        if get_user_mode(user_id) == GUESTS:
+        if user_mode == GUESTS:
             if call.data == 'FINISH_GUESTS':
                 guests_df = get_guests_df(user_id)
                 db_access.save_visitors_to_db(guests_df, ENGINE)
@@ -362,16 +399,35 @@ def callback_query(call):
                 logger.info(f'Guest added: {call.data}')
                 bot.answer_callback_query(call.id, call.data)
                 add_guest_vist(user_id, leader, call.data)
-        #elif get_user_mode(user_id) == HG_SUMMARY:
+        #elif user_mode == HG_SUMMARY:
         #skip summary button click
-        elif get_user_mode(user_id) == HG_SUMMARY_CONFIRM:
+        elif user_mode == HG_SUMMARY_CONFIRM:
+            if call.data == 'YES':
+                logger.info(f'Confirmed hg summary: {SUMMARY[user_id]}')
+                bot.answer_callback_query(call.id, f'Confirmed hg summary: {SUMMARY[user_id]}')
+                respond_distributed_people(user_id)
+            elif call.data == 'NO':
+                respond_hg_summary(user_id, call.id)
+        elif user_mode == DISTRIBUTED_PEOPLE:
+            if call.data == 'YES':
+                bot.answer_callback_query(call.id)
+                respond_input_distributed_people(user_id)
+            elif call.data == 'NO':
+                questions_df = get_questions_df(user_id)
+                db_access.save_questions_to_db(questions_df, ENGINE)
+                logger.info(f'Saved questions df: {questions_df}')
+                bot.answer_callback_query(call.id)
+                respond_finish(user_id)
+        elif user_mode == DISTRIBUTED_PEOPLE_CONFIRM:
             if call.data == 'YES':
                 questions_df = get_questions_df(user_id)
                 db_access.save_questions_to_db(questions_df, ENGINE)
-                logger.info(f'Saved hg summary: {SUMMARY[user_id]}')
-                bot.answer_callback_query(call.id, f'Saved hg summary: {SUMMARY[user_id]}')
+                logger.info(f'Saved questions df: {questions_df}')
+                bot.answer_callback_query(call.id)
+                respond_finish(user_id)
             elif call.data == 'NO':
-                respond_hg_summary(user_id, call.id)
+                bot.answer_callback_query(call.id)
+                respond_input_distributed_people(user_id)
         else:
             if call.data == 'REVIEW':
                 # bot.edit_message(user_id, reply_markup=ReplyKeyboardRemove())
@@ -384,7 +440,7 @@ def callback_query(call):
     except IntegrityError as e:
         logger.error(e);
         bot.answer_callback_query(call.id, 'Произошла ошибка. Нам очень жаль 😔')
-        bot.send_message(user_id, f'Данные для группы {group_id} за дату {DATES[user_id]} уже были внесены', reply_markup=ReplyKeyboardRemove())
+        bot.send_message(user_id, f'👺 Данные для группы {group_id} за дату {DATES[user_id]} уже были внесены', reply_markup=ReplyKeyboardRemove())
     except Exception as e:
         capture_exception(e)
         logger.error(e);
@@ -475,6 +531,9 @@ def handle_generic_messages(message):
         elif user_mode == HG_SUMMARY:
             add_summary(user_id, group_info, message.text)
             respond_confirm_hg_summary(user_id)
+        elif user_mode == DISTRIBUTED_PEOPLE_INPUT:
+            add_distributed_people(user_id, message.text)
+            respond_confirm_distributed_people(user_id)
     except Exception as e:
         capture_exception(e)
         logger.error(e);
