@@ -6,7 +6,7 @@ import db_access
 from loguru import logger
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
-
+from babel.dates import format_date
 
 logger.add("debug.log", format="{time} {level} {message}", level="INFO", rotation="3 MB", compression="zip")
 
@@ -22,9 +22,9 @@ VISITORS = defaultdict(dict)
 GUEST_VISITORS = defaultdict(list)
 ACTIVE_REASONS = defaultdict(None)
 DATES = defaultdict(None)
+formatter = 'd MMMM yyyy г.'
 SUMMARY = defaultdict(None)
 DISTRIBUTED_PEOPLE_FEEDBACK = defaultdict(None)
-
 
 ENGINE = create_engine(f'postgresql://{config.db_user}:{config.db_password}@{config.db_hostname}:{config.db_port}/{config.db_name}?sslmode=require')
 
@@ -34,17 +34,17 @@ from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 bot = telebot.TeleBot(config.bot_token)
 
 import sentry_sdk
+
 sentry_sdk.init(config.sentry_url)
 from sentry_sdk import capture_exception
 
-
 # {username: {'group_id': , 'leader': , 'username': 'uid': (after first reaction from tg)}}
 USERS = db_access.select_leader_usernames(ENGINE)
-USER_ID_MAP = {} # user_id: username
+USER_ID_MAP = {}  # user_id: username
 GROUP_ICONS = ['🍏', '🍒', '🍉', '🍍', '🥥', '🍑', '🍇', '🫑', '🥝', '🍋']
 
 
-#================HELPER METHODS================
+# ================HELPER METHODS================
 
 def update_user_id(username, user_id):
     USERS[username]['user_id'] = user_id
@@ -94,8 +94,8 @@ def parse_date(text):
         return DATES[text]()
     else:
         try:
-            visit_date = datetime.strptime(text, "%d/%m")
-            visit_date = visit_date.replace(year=2021)
+            visit_date = datetime.strptime(text, '%d/%m/%y')
+            visit_date = format_date(visit_date, formatter, locale='ru')
             return visit_date
         except Exception as e:
             logger.error(e)
@@ -110,23 +110,23 @@ def set_user_mode(user_id, mode):
     USER_STATES[user_id] = mode
 
 
-#================MENUS================
+# ================MENUS================
 
 def get_visit_markup(members):
     markup = InlineKeyboardMarkup()
     for member in members:
-        markup.row(InlineKeyboardButton(member,  callback_data='TITLE'))
+        markup.row(InlineKeyboardButton(member, callback_data='TITLE'))
         markup.row(InlineKeyboardButton(f"✅", callback_data="{}: +".format(member)),
                    InlineKeyboardButton(f"🚫", callback_data="{}: -".format(member)))
     markup.row(InlineKeyboardButton('Подтвердить отметки', callback_data='REVIEW'))
-#     markup.row(InlineKeyboardButton('Добавить гостя', callback_data='ADD_GUEST'))
+    #     markup.row(InlineKeyboardButton('Добавить гостя', callback_data='ADD_GUEST'))
     return markup
 
 
 def get_guests_markup(guests):
     markup = InlineKeyboardMarkup()
     for guest in guests:
-        markup.row(InlineKeyboardButton(guest,  callback_data='TITLE'),
+        markup.row(InlineKeyboardButton(guest, callback_data='TITLE'),
                    InlineKeyboardButton("✅", callback_data=f"{guest}"))
     markup.row(InlineKeyboardButton('Завершить добавление гостей', callback_data='FINISH_GUESTS'))
     return markup
@@ -170,42 +170,44 @@ def get_reasons_markup():
 
 def get_confirm_yes_no_markup():
     markup = InlineKeyboardMarkup()
-    markup.row(InlineKeyboardButton('Да, все верно', callback_data='YES'), InlineKeyboardButton('Нет, хочу исправить', callback_data='NO'))
+    markup.row(InlineKeyboardButton('Да, все верно', callback_data='YES'),
+               InlineKeyboardButton('Нет, хочу исправить', callback_data='NO'))
     return markup
 
 
 def get_distributed_people_markup():
     markup = InlineKeyboardMarkup()
-    markup.row(InlineKeyboardButton('Рассказать', callback_data='YES'), InlineKeyboardButton('Таких людей нет', callback_data='NO'))
+    markup.row(InlineKeyboardButton('Рассказать', callback_data='YES'),
+               InlineKeyboardButton('Таких людей нет', callback_data='NO'))
     return markup
 
 
-DATES = {'✔️ Сегодня': (lambda : datetime.now().date()),
-         '◀️ Вчера': (lambda : datetime.now().date() - timedelta(days=1)),
-         '⏪ Позавчера': (lambda : datetime.now().date() - timedelta(days=2))}
-
+DATES = {'✔️ Сегодня': (lambda: format_date(datetime.now().date(), formatter, 'ru')),
+         '◀️ Вчера': (lambda: format_date(datetime.now().date() - timedelta(days=1), formatter, 'ru')),
+         '⏪ Позавчера': (lambda: format_date(datetime.now().date() - timedelta(days=2), formatter, 'ru'))}
 
 # key = some code, value = (message for DB, display message)
-REASONS = {'work':     ('Работа / Учеба', '💼 Работа / Учеба'),
-           'family':   ('Семейные обстоятельства', '🚼 Семейные обстоятельства'),
-           'illness':  ('Болезнь', '🩺 Болезнь'),
-           'church':   ('Встреча по служению в церкви / Был на другой ДГ', '🦸 Встреча по служению в церкви / Был на другой ДГ'),
+REASONS = {'work': ('Работа / Учеба', '💼 Работа / Учеба'),
+           'family': ('Семейные обстоятельства', '🚼 Семейные обстоятельства'),
+           'illness': ('Болезнь', '🩺 Болезнь'),
+           'church': (
+               'Встреча по служению в церкви / Был на другой ДГ', '🦸 Встреча по служению в церкви / Был на другой ДГ'),
            'vacation': ('Отпуск / Был в другом городе', '✈️ Отпуск / Был в другом городе'),
-           'forgot':   ('Не захотел прийти / Забыл', '🙈 Не захотел прийти / Забыл'),
-           'unknown':  ('Не удалось выяснить причину', '🤷 Не удалось выяснить причину'),
-           'delete':   ('Удалить человека', '🚫 Удалить человека')
+           'forgot': ('Не захотел прийти / Забыл', '🙈 Не захотел прийти / Забыл'),
+           'unknown': ('Не удалось выяснить причину', '🤷 Не удалось выяснить причину'),
+           'delete': ('Удалить человека', '🚫 Удалить человека')
            }
 
 
 def get_visitors_df(user_id):
     df = pd.DataFrame([{
-                        'name_leader': values['leader'],
-                        'id_hg': get_current_group_id(user_id),
-                        'name': name,
-                        'status': values['status'],
-                        'type_person': 'Член',
-                        'reason': values.get('reason', None) }
-                       for name, values in VISITORS[user_id].items()])
+        'name_leader': values['leader'],
+        'id_hg': get_current_group_id(user_id),
+        'name': name,
+        'status': values['status'],
+        'type_person': 'Член',
+        'reason': values.get('reason', None)}
+        for name, values in VISITORS[user_id].items()])
     df['date'] = DATES[user_id]
     df['date_processed'] = datetime.now()
     return df
@@ -213,12 +215,12 @@ def get_visitors_df(user_id):
 
 def get_guests_df(user_id):
     df = pd.DataFrame([{
-                        'name_leader': guest['leader'],
-                        'id_hg': get_current_group_id(user_id),
-                        'name': guest['name'],
-                        'status': guest['status'],
-                        'type_person': 'Гость' }
-                       for guest in GUEST_VISITORS[user_id]])
+        'name_leader': guest['leader'],
+        'id_hg': get_current_group_id(user_id),
+        'name': guest['name'],
+        'status': guest['status'],
+        'type_person': 'Гость'}
+        for guest in GUEST_VISITORS[user_id]])
     df['date'] = DATES[user_id]
     df['date_processed'] = datetime.now()
     return df
@@ -229,14 +231,14 @@ def get_questions_df(user_id):
     user_info = USERS[username]
     group_id = USER_CURRENT_GROUPS[username]
     group_info = get_group_info(user_info, group_id)
-    
+
     df = pd.DataFrame([{
-                        'name_leader': group_info['leader'],
-                        'id_hg': group_id[:7],
-                        'date': DATES[user_id],
-                        'summary': SUMMARY[user_id],
-                        'distributed_people_feedback': DISTRIBUTED_PEOPLE_FEEDBACK[user_id]
-                      }])
+        'name_leader': group_info['leader'],
+        'id_hg': group_id[:7],
+        'date': DATES[user_id],
+        'summary': SUMMARY[user_id],
+        'distributed_people_feedback': DISTRIBUTED_PEOPLE_FEEDBACK[user_id]
+    }])
     return df
 
 
@@ -273,19 +275,19 @@ def cleanup(user_id):
     set_user_mode(user_id, DATE)
 
 
-#================WORKING WITH BOT================
+# ================WORKING WITH BOT================
 
 def respond_select_date(bot, user_id, username, group_id):
     update_user_current_group(username, group_id)
     user_info = USERS[username]
     group_info = get_group_info(user_info, group_id)
-    #bot.reply_to(message, f'Привет! Ты — {group_info["leader"]}, лидер группы {group_info["group_id"]}.')
+    # bot.reply_to(message, f'Привет! Ты — {group_info["leader"]}, лидер группы {group_info["group_id"]}.')
 
     dates_menu = get_dates_markup()
     set_user_mode(user_id, DATE)
     bot.send_message(user_id,
-                 f'Привет! Ты — {group_info["leader"]}, лидер группы {group_info["group_id"]}. '\
-                 'Выбери дату из списка или отправь дату в формате ДД/ММ (27/12)', reply_markup=dates_menu)
+                     f'Привет! Ты — {group_info["leader"]}, лидер группы {group_info["group_id"]}. '
+                     'Выбери дату из списка или отправь дату в формате ДД.ММ.ГГ (27/12/21)', reply_markup=dates_menu)
 
 
 def respond_review(bot, leader, user_id, call_id):
@@ -352,8 +354,9 @@ def respond_confirm_hg_summary(user_id, call_id=None):
 def respond_distributed_people(user_id):
     set_user_mode(user_id, DISTRIBUTED_PEOPLE)
     distributed_people_markup = get_distributed_people_markup()
-    bot.send_message(user_id, 'Если у тебя есть люди, которых тебе распределили вышестоящие лидеры — расскажи, какая ситуация с ними?',
-            reply_markup=distributed_people_markup)
+    bot.send_message(user_id,
+                     'Если у тебя есть люди, которых тебе распределили вышестоящие лидеры — расскажи, какая ситуация с ними?',
+                     reply_markup=distributed_people_markup)
 
 
 def respond_input_distributed_people(user_id):
@@ -364,12 +367,14 @@ def respond_input_distributed_people(user_id):
 def respond_confirm_distributed_people(user_id):
     set_user_mode(user_id, DISTRIBUTED_PEOPLE_CONFIRM)
     confirm_distributed_people_markup = get_confirm_yes_no_markup()
-    bot.send_message(user_id, 'Ситуация с распределенными людьми описана правильно?', reply_markup=confirm_distributed_people_markup)
+    bot.send_message(user_id, 'Ситуация с распределенными людьми описана правильно?',
+                     reply_markup=confirm_distributed_people_markup)
 
 
 def respond_finish(user_id):
     set_user_mode(user_id, FINISH_ALL)
-    bot.send_message(user_id, f'Спасибо! Так классно, что ты вовремя заполняешь отчет! 🙌', reply_markup=ReplyKeyboardRemove())
+    bot.send_message(user_id, f'Спасибо! Так классно, что ты вовремя заполняешь отчет! 🙌',
+                     reply_markup=ReplyKeyboardRemove())
 
 
 # Handles all clicks on inline buttons
@@ -394,13 +399,13 @@ def callback_query(call):
                 bot.send_message(user_id, f'Гости добавлены:\n\n{guests_text}',
                                  reply_markup=ReplyKeyboardRemove())
                 respond_hg_summary(user_id, call.id)
-                #cleanup(user_id)
+                # cleanup(user_id)
             elif call.data != "TITLE":
                 logger.info(f'Guest added: {call.data}')
                 bot.answer_callback_query(call.id, call.data)
                 add_guest_vist(user_id, leader, call.data)
-        #elif user_mode == HG_SUMMARY:
-        #skip summary button click
+        # elif user_mode == HG_SUMMARY:
+        # skip summary button click
         elif user_mode == HG_SUMMARY_CONFIRM:
             if call.data == 'YES':
                 logger.info(f'Confirmed hg summary: {SUMMARY[user_id]}')
@@ -438,12 +443,13 @@ def callback_query(call):
             elif call.data != "TITLE":
                 respond_visitor_selection(bot, leader, user_id, call.id, call.data)
     except IntegrityError as e:
-        logger.error(e);
+        logger.error(e)
         bot.answer_callback_query(call.id, 'Произошла ошибка. Нам очень жаль 😔')
-        bot.send_message(user_id, f'👺 Данные для группы {group_id} за дату {DATES[user_id]} уже были внесены', reply_markup=ReplyKeyboardRemove())
+        bot.send_message(user_id, f'👺 Данные для группы {group_id} за дату {DATES[user_id]} уже были внесены',
+                         reply_markup=ReplyKeyboardRemove())
     except Exception as e:
         capture_exception(e)
-        logger.error(e);
+        logger.error(e)
         bot.answer_callback_query(call.id, 'Произошла ошибка. Нам очень жаль 😔')
 
 
@@ -469,7 +475,7 @@ def select_group(message):
             respond_select_date(bot, user_id, username, group_ids[0])
     except Exception as e:
         capture_exception(e)
-        logger.error(e);
+        logger.error(e)
 
 
 @bot.message_handler(func=check_user_group, regexp='Группа: ')
@@ -482,7 +488,7 @@ def select_date(message):
         update_user_id(username, user_id)
         group_id = message.text.replace('Группа: ', '')
         if group_id[0] in GROUP_ICONS and group_id[1] == ' ':
-            group_id = group_id[2:] # remove emoji
+            group_id = group_id[2:]  # remove emoji
         group_ids = map(lambda x: x['group_id'], user_info['hgs'])
         if not group_id in group_ids:
             bot.reply_to(message, f'Ошибка в номере группы {group_id}, попробуй ввести еще раз')
@@ -492,7 +498,7 @@ def select_date(message):
 
     except Exception as e:
         capture_exception(e)
-        logger.error(e);
+        logger.error(e)
 
 
 @bot.message_handler(func=check_user_group)
@@ -536,7 +542,7 @@ def handle_generic_messages(message):
             respond_confirm_distributed_people(user_id)
     except Exception as e:
         capture_exception(e)
-        logger.error(e);
+        logger.error(e)
 
 
 bot.polling()
