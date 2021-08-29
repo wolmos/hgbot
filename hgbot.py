@@ -6,13 +6,16 @@ import db_access
 from loguru import logger
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
-from babel.dates import format_date
+import babel.dates
 
 logger.add("debug.log", format="{time} {level} {message}", level="INFO", rotation="3 MB", compression="zip")
 
 # States from certain range. States are kept in memory, lost if bot if restarted!
 USER_STATES = defaultdict(int)
-SELECT_GROUP, DATE, MARK_VISITORS, GUESTS, HG_SUMMARY, HG_SUMMARY_CONFIRM, TESTIMONIES, PREACHER, DISTRIBUTED_PEOPLE, DISTRIBUTED_PEOPLE_INPUT, DISTRIBUTED_PEOPLE_CONFIRM, FINISH_ALL = range(12)
+SELECT_GROUP, DATE, MARK_VISITORS, GUESTS, HG_SUMMARY, HG_SUMMARY_CONFIRM, \
+TESTIMONIES, TESTIMONIES_INPUT, TESTIMONIES_CONFIRM, PREACHER, \
+DISTRIBUTED_PEOPLE, DISTRIBUTED_PEOPLE_INPUT, DISTRIBUTED_PEOPLE_CONFIRM, \
+PERSONAL_MEETING, PERSONAL_MEETING_INPUT, PERSONAL_MEETING_CONFIRM, FINISH_ALL = range(17)
 
 # For each user, the current group he is working on (one user can edit different groups)
 USER_CURRENT_GROUPS = defaultdict(int)
@@ -22,9 +25,10 @@ VISITORS = defaultdict(dict)
 GUEST_VISITORS = defaultdict(list)
 ACTIVE_REASONS = defaultdict(None)
 DATES = defaultdict(None)
-formatter = 'd MMMM yyyy г.'
 SUMMARY = defaultdict(None)
 DISTRIBUTED_PEOPLE_FEEDBACK = defaultdict(None)
+TESTIMONY = defaultdict(None)
+PERSONAL_MEETINGS_FEEDBACK = defaultdict(None)
 
 ENGINE = create_engine(f'postgresql://{config.db_user}:{config.db_password}@{config.db_hostname}:{config.db_port}/{config.db_name}?sslmode=require')
 
@@ -95,12 +99,13 @@ def parse_date(text):
     else:
         try:
             visit_date = datetime.strptime(text, '%d/%m/%y')
-            visit_date = format_date(visit_date, formatter, locale='ru')
             return visit_date
         except Exception as e:
             logger.error(e)
             return None
 
+def format_date(date):
+    return babel.dates.format_date(date, 'd MMMM yyyy г.', 'ru')
 
 def get_user_mode(user_id):
     return USER_STATES[user_id]
@@ -178,13 +183,13 @@ def get_confirm_yes_no_markup():
 def get_distributed_people_markup():
     markup = InlineKeyboardMarkup()
     markup.row(InlineKeyboardButton('Рассказать', callback_data='YES'),
-               InlineKeyboardButton('Таких людей нет', callback_data='NO'))
+               InlineKeyboardButton('Нет', callback_data='NO'))
     return markup
 
 
-DATES = {'✔️ Сегодня': (lambda: format_date(datetime.now().date(), formatter, 'ru')),
-         '◀️ Вчера': (lambda: format_date(datetime.now().date() - timedelta(days=1), formatter, 'ru')),
-         '⏪ Позавчера': (lambda: format_date(datetime.now().date() - timedelta(days=2), formatter, 'ru'))}
+DATES = {'✔️ Сегодня': (lambda: datetime.now().date()),
+         '◀️ Вчера': (lambda: datetime.now().date() - timedelta(days=1)),
+         '⏪ Позавчера': (lambda: datetime.now().date() - timedelta(days=2))}
 
 # key = some code, value = (message for DB, display message)
 REASONS = {'work': ('Работа / Учеба', '💼 Работа / Учеба'),
@@ -237,7 +242,9 @@ def get_questions_df(user_id):
         'id_hg': group_id[:7],
         'date': DATES[user_id],
         'summary': SUMMARY[user_id],
-        'distributed_people_feedback': DISTRIBUTED_PEOPLE_FEEDBACK[user_id]
+        'distributed_people_feedback': DISTRIBUTED_PEOPLE_FEEDBACK[user_id],
+        'testimony': TESTIMONY[user_id],
+        'personal_meeting': PERSONAL_MEETINGS_FEEDBACK[user_id]
     }])
     return df
 
@@ -252,6 +259,12 @@ def add_summary(user_id, group_info, summary):
 
 def add_distributed_people(user_id, feedback):
     DISTRIBUTED_PEOPLE_FEEDBACK[user_id] = feedback
+
+def add_testimonies(user_id, testimony):
+    TESTIMONY[user_id] = testimony
+
+def add_personal_meetings_feedback(user_id, personal_meetings_feedback):
+    PERSONAL_MEETINGS_FEEDBACK[user_id] = personal_meetings_feedback
 
 
 def group_members_checked(user_id):
@@ -287,7 +300,7 @@ def respond_select_date(bot, user_id, username, group_id):
     set_user_mode(user_id, DATE)
     bot.send_message(user_id,
                      f'Привет! Ты — {group_info["leader"]}, лидер группы {group_info["group_id"]}. '
-                     'Выбери дату из списка или отправь дату в формате ДД.ММ.ГГ (27/12/21)', reply_markup=dates_menu)
+                     'Выбери дату из списка или отправь дату в формате ДД/ММ/ГГ (27/12/21)', reply_markup=dates_menu)
 
 
 def respond_review(bot, leader, user_id, call_id):
@@ -371,6 +384,40 @@ def respond_confirm_distributed_people(user_id):
                      reply_markup=confirm_distributed_people_markup)
 
 
+def respond_testimonies(user_id):
+    set_user_mode(user_id, TESTIMONIES)
+    testimonies_markup = get_distributed_people_markup()
+    bot.send_message(user_id, 'Были ли какие-нибудь свидетельства?', reply_markup=testimonies_markup)
+
+def respond_input_testimonies(user_id):
+    set_user_mode(user_id, TESTIMONIES_INPUT)
+    bot.send_message(user_id, 'Опиши, какие были свидетельства (например, Иванов Иван: Молились за исцеление...)')
+
+
+def respond_confirm_testimonies(user_id):
+    set_user_mode(user_id, TESTIMONIES_CONFIRM)
+    confirm_testimonies_markup = get_confirm_yes_no_markup()
+    bot.send_message(user_id, 'Свидетельства описаны правильно?',
+                     reply_markup=confirm_testimonies_markup)
+
+
+def respond_personal_meetings_feedback(user_id):
+    set_user_mode(user_id, PERSONAL_MEETING)
+    personal_meeting_markup = get_distributed_people_markup()
+    bot.send_message(user_id, 'Были ли личные встречи?', reply_markup=personal_meeting_markup)
+
+def respond_input_personal_meetings_feedback(user_id):
+    set_user_mode(user_id, PERSONAL_MEETING_INPUT)
+    bot.send_message(user_id, 'Расскажи, с кем были встречи')
+
+
+def respond_confirm_personal_meetings_feedback(user_id):
+    set_user_mode(user_id, PERSONAL_MEETING_CONFIRM)
+    confirm_personal_meetings_markup = get_confirm_yes_no_markup()
+    bot.send_message(user_id, 'Про встречи написано правильно?',
+                     reply_markup=confirm_personal_meetings_markup)
+
+
 def respond_finish(user_id):
     set_user_mode(user_id, FINISH_ALL)
     bot.send_message(user_id, f'Спасибо! Так классно, что ты вовремя заполняешь отчет! 🙌',
@@ -410,9 +457,37 @@ def callback_query(call):
             if call.data == 'YES':
                 logger.info(f'Confirmed hg summary: {SUMMARY[user_id]}')
                 bot.answer_callback_query(call.id, f'Confirmed hg summary: {SUMMARY[user_id]}')
-                respond_distributed_people(user_id)
+                respond_testimonies(user_id)
             elif call.data == 'NO':
                 respond_hg_summary(user_id, call.id)
+        elif user_mode == TESTIMONIES:
+            if call.data == 'YES':
+                bot.answer_callback_query(call.id)
+                respond_input_testimonies(user_id)
+            elif call.data == 'NO':
+                bot.answer_callback_query(call.id)
+                respond_personal_meetings_feedback(user_id)
+        elif user_mode == TESTIMONIES_CONFIRM:
+            if call.data == 'YES':
+                bot.answer_callback_query(call.id)
+                respond_personal_meetings_feedback(user_id)
+            elif call.data == 'NO':
+                bot.answer_callback_query(call.id)
+                respond_input_testimonies(user_id)
+        elif user_mode == PERSONAL_MEETING:
+            if call.data == 'YES':
+                bot.answer_callback_query(call.id)
+                respond_input_personal_meetings_feedback(user_id)
+            elif call.data == 'NO':
+                bot.answer_callback_query(call.id)
+                respond_distributed_people(user_id)
+        elif user_mode == PERSONAL_MEETING_CONFIRM:
+            if call.data == 'YES':
+                bot.answer_callback_query(call.id)
+                respond_distributed_people(user_id)
+            elif call.data == 'NO':
+                bot.answer_callback_query(call.id)
+                respond_input_personal_meetings_feedback(user_id)
         elif user_mode == DISTRIBUTED_PEOPLE:
             if call.data == 'YES':
                 bot.answer_callback_query(call.id)
@@ -445,7 +520,7 @@ def callback_query(call):
     except IntegrityError as e:
         logger.error(e)
         bot.answer_callback_query(call.id, 'Произошла ошибка. Нам очень жаль 😔')
-        bot.send_message(user_id, f'👺 Данные для группы {group_id} за дату {DATES[user_id]} уже были внесены',
+        bot.send_message(user_id, f'👺 Данные для группы {group_id} за дату {format_date(DATES[user_id])} уже были внесены',
                          reply_markup=ReplyKeyboardRemove())
     except Exception as e:
         capture_exception(e)
@@ -493,7 +568,7 @@ def select_date(message):
         if not group_id in group_ids:
             bot.reply_to(message, f'Ошибка в номере группы {group_id}, попробуй ввести еще раз')
             return
-        print(f'Requested to work with group id {group_id}')
+        logger.info(f'Requested to work with group id {group_id}')
         respond_select_date(bot, user_id, username, group_id)
 
     except Exception as e:
@@ -520,9 +595,9 @@ def handle_generic_messages(message):
             visit_date = parse_date(message.text)
             if visit_date:
                 group_members = get_members(group_id)
-                bot.send_message(user_id, f'Выбранная дата: {visit_date}', reply_markup=ReplyKeyboardRemove())
+                bot.send_message(user_id, f'Выбранная дата: {format_date(visit_date)}', reply_markup=ReplyKeyboardRemove())
                 visit_menu = get_visit_markup(group_members)
-                bot.send_message(user_id, f'Отметь посещение за {visit_date}', reply_markup=visit_menu)
+                bot.send_message(user_id, f'Отметь посещения за {format_date(visit_date)}, а затем нажми кнопку «Подтвердить отметки»', reply_markup=visit_menu)
                 set_user_mode(user_id, MARK_VISITORS)
                 DATES[user_id] = visit_date
             else:
@@ -537,6 +612,12 @@ def handle_generic_messages(message):
         elif user_mode == HG_SUMMARY:
             add_summary(user_id, group_info, message.text)
             respond_confirm_hg_summary(user_id)
+        elif user_mode == TESTIMONIES_INPUT:
+            add_testimonies(user_id, message.text)
+            respond_confirm_testimonies(user_id)
+        elif user_mode == PERSONAL_MEETING_INPUT:
+            add_personal_meetings_feedback(user_id, message.text)
+            respond_confirm_personal_meetings_feedback(user_id)
         elif user_mode == DISTRIBUTED_PEOPLE_INPUT:
             add_distributed_people(user_id, message.text)
             respond_confirm_distributed_people(user_id)
