@@ -609,7 +609,7 @@ def handle_generic_messages(message):
 
         elif user_mode == MARK_VISITORS:
             reason_for_db = list(filter(lambda reason: reason[1] == message.text, REASONS.values()))[0][0]
-            VISITORS[user_id][ACTIVE_REASONS[user_id]]['reason'] = message.text
+            VISITORS[user_id][ACTIVE_REASONS[user_id]]['reason'] = reason_for_db
         elif user_mode == GUESTS:
             bot.send_message(user_id, f'Добавлен гость {message.text}')
             add_guest_vist(user_id, leader, message.text)
