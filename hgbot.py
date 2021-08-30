@@ -285,6 +285,8 @@ def cleanup(user_id):
     USER_CURRENT_GROUPS[user_id] = None
     SUMMARY[user_id] = None
     DISTRIBUTED_PEOPLE_FEEDBACK[user_id] = None
+    TESTIMONY[user_id] = None
+    PERSONAL_MEETINGS_FEEDBACK[user_id] = None
     set_user_mode(user_id, DATE)
 
 
@@ -300,7 +302,7 @@ def respond_select_date(bot, user_id, username, group_id):
     set_user_mode(user_id, DATE)
     bot.send_message(user_id,
                      f'Привет! Ты — {group_info["leader"]}, лидер группы {group_info["group_id"]}. '
-                     'Выбери дату из списка или отправь дату в формате ДД/ММ/ГГ (27/12/21)', reply_markup=dates_menu)
+                     'Выбери дату из списка или отправь дату в формате ДД/ММ/ГГ (03/09/21)', reply_markup=dates_menu)
 
 
 def respond_review(bot, leader, user_id, call_id):
@@ -330,7 +332,7 @@ def respond_complete(bot, group_id, user_id, call_id):
     guests = db_access.get_group_guests(group_id, ENGINE)
     guests_markup = get_guests_markup(guests)
     bot.send_message(user_id,
-                     'Переходим к добавлению гостей. Отправь в отдельных сообщениях имена новых гостей или выбери повторно посетивших из списка.',
+                     'Переходим к добавлению гостей. Отправь в отдельных сообщениях имена новых гостей или выбери повторно посетивших из списка. Затем нажми «Завершить добавление гостей»',
                      reply_markup=guests_markup)
     bot.answer_callback_query(call_id)
 
@@ -352,7 +354,7 @@ def respond_visitor_selection(bot, leader, user_id, call_id, call_data):
 
 def respond_hg_summary(user_id, call_id):
     set_user_mode(user_id, HG_SUMMARY)
-    bot.send_message(user_id, 'Опиши, о чем была духовная часть (3–4 тезиса)')
+    bot.send_message(user_id, 'Опиши, о чем была духовная часть (3–4 тезиса)', reply_markup=ReplyKeyboardRemove())
     bot.answer_callback_query(call_id)
 
 
@@ -420,8 +422,7 @@ def respond_confirm_personal_meetings_feedback(user_id):
 
 def respond_finish(user_id):
     set_user_mode(user_id, FINISH_ALL)
-    bot.send_message(user_id, f'Спасибо! Так классно, что ты вовремя заполняешь отчет! 🙌',
-                     reply_markup=ReplyKeyboardRemove())
+    bot.send_message(user_id, config.thank_you_message.replace('\\n', '\n'), reply_markup=ReplyKeyboardRemove())
 
 
 # Handles all clicks on inline buttons
@@ -442,9 +443,14 @@ def callback_query(call):
                 guests_df = get_guests_df(user_id)
                 db_access.save_visitors_to_db(guests_df, ENGINE)
                 guests_text = '\n'.join([row['name'] for i, row in guests_df.iterrows()])
-                bot.answer_callback_query(call.id, 'Гости добавлены')
-                bot.send_message(user_id, f'Гости добавлены:\n\n{guests_text}',
-                                 reply_markup=ReplyKeyboardRemove())
+                if guests_text != '':
+                    bot.answer_callback_query(call.id)
+                    bot.send_message(user_id, f'Гости добавлены:\n\n{guests_text}',
+                                    reply_markup=ReplyKeyboardRemove())
+                else:
+                    bot.answer_callback_query(call.id)
+                    bot.send_message(user_id, f'Гостей не было',
+                                    reply_markup=ReplyKeyboardRemove())
                 respond_hg_summary(user_id, call.id)
                 # cleanup(user_id)
             elif call.data != "TITLE":
@@ -524,7 +530,7 @@ def callback_query(call):
                          reply_markup=ReplyKeyboardRemove())
     except Exception as e:
         capture_exception(e)
-        logger.error(e)
+        logger.exception(e)
         bot.answer_callback_query(call.id, 'Произошла ошибка. Нам очень жаль 😔')
 
 
@@ -550,7 +556,7 @@ def select_group(message):
             respond_select_date(bot, user_id, username, group_ids[0])
     except Exception as e:
         capture_exception(e)
-        logger.error(e)
+        logger.exception(e)
 
 
 @bot.message_handler(func=check_user_group, regexp='Группа: ')
@@ -573,7 +579,7 @@ def select_date(message):
 
     except Exception as e:
         capture_exception(e)
-        logger.error(e)
+        logger.exception(e)
 
 
 @bot.message_handler(func=check_user_group)
@@ -597,7 +603,7 @@ def handle_generic_messages(message):
                 group_members = get_members(group_id)
                 bot.send_message(user_id, f'Выбранная дата: {format_date(visit_date)}', reply_markup=ReplyKeyboardRemove())
                 visit_menu = get_visit_markup(group_members)
-                bot.send_message(user_id, f'Отметь посещения за {format_date(visit_date)}, а затем нажми кнопку «Подтвердить отметки»', reply_markup=visit_menu)
+                bot.send_message(user_id, f'Отметь посещения за {format_date(visit_date)} (при присутствии нажми ✅, при отсутствии нажми 🚫 и выбери причину отсутствия), а затем нажми кнопку «Подтвердить отметки»', reply_markup=visit_menu)
                 set_user_mode(user_id, MARK_VISITORS)
                 DATES[user_id] = visit_date
             else:
@@ -623,7 +629,7 @@ def handle_generic_messages(message):
             respond_confirm_distributed_people(user_id)
     except Exception as e:
         capture_exception(e)
-        logger.error(e)
+        logger.exception(e)
 
 
 bot.polling()

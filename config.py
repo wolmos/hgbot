@@ -15,3 +15,6 @@ bot_token = os.environ['BOT_TOKEN']
 
 # Sentry
 sentry_url = os.environ['SENTRY_URL']
+
+# Other
+thank_you_message = os.environ['THANK_YOU_MESSAGE']
