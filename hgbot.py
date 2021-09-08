@@ -7,6 +7,7 @@ from loguru import logger
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 import babel.dates
+import random
 
 logger.add("debug.log", format="{time} {level} {message}", level="INFO", rotation="3 MB", compression="zip")
 
@@ -64,8 +65,9 @@ def check_user_group(message):
     for username, user_info in USERS.items():
         if source_username == username:
             return user_info
+    bot.send_message(message.from_user.id, 'Привет! К сожалению у тебя нет доступа')
+    logger.warning(f'The user @{source_username} does not have access')
     return False
-
 
 def get_leader_members(username):
     group_id = USER_CURRENT_GROUPS[username]
@@ -348,6 +350,10 @@ def respond_visitor_selection(bot, leader, user_id, call_id, call_data):
     else:
         bot.answer_callback_query(call_id, call_data)
         VISITORS[user_id][name] = {'status': '+', 'leader': leader}
+        if group_members_checked(user_id):
+            bot.send_message(user_id, f'Отлично! Теперь нажми «Подтвердить отметки»')
+        else:
+            bot.send_message(user_id, f'{name}: ✅\nПродолжай отмечать дальше.')
 
 
 def respond_hg_summary(user_id, call_id):
@@ -417,10 +423,16 @@ def respond_confirm_personal_meetings_feedback(user_id):
     bot.send_message(user_id, 'Про встречи написано правильно?',
                      reply_markup=confirm_personal_meetings_markup)
 
+def get_thank_you_message():
+    variants = ['«Еще говорит ему в другой раз: Симон Ионин! любишь ли ты Меня? Петр говорит Ему: так, Господи! Ты знаешь, что я люблю Тебя. Иисус говорит ему: паси овец Моих.»\nОт Иоанна святое благовествование 21:16 SYNO\n\nСпасибо что и ты любишь Иисуса🙌🏽',
+              'Ты сделал маленький, но очень важный шаг к росту своей дг🔥', '«Итак, братия мои возлюбленные, будьте тверды, непоколебимы, всегда преуспевайте в деле Господнем, зная, что труд ваш не тщетен пред Господом.»\nПервое послание к Коринфянам 15:58 SYNO\n\nТвой труд ценен, спасибо за твоё служение!',
+              'При заполнении отчета не пострадало ни одно дерево!😂', 'Спасибо тебе за твое служение для Божьего царства. Твоя работа — очень важная часть нашей церкви, и мы ценим тебя как служителя и как друга!☺️']
+    feedback = 'Вопросы и предложения по поводу бота можно адресовать @sasha_ab, постараемся решить проблему 🙂'
+    return random.choice(variants) + '\n\n' + feedback
 
 def respond_finish(user_id):
     set_user_mode(user_id, FINISH_ALL)
-    bot.send_message(user_id, config.thank_you_message.replace('\\n', '\n'), reply_markup=ReplyKeyboardRemove())
+    bot.send_message(user_id, get_thank_you_message(), reply_markup=ReplyKeyboardRemove())
 
 
 # Handles all clicks on inline buttons
@@ -460,7 +472,7 @@ def callback_query(call):
         elif user_mode == HG_SUMMARY_CONFIRM:
             if call.data == 'YES':
                 logger.info(f'Confirmed hg summary: {SUMMARY[user_id]}')
-                bot.answer_callback_query(call.id, f'Confirmed hg summary: {SUMMARY[user_id]}')
+                bot.answer_callback_query(call.id)
                 respond_testimonies(user_id)
             elif call.data == 'NO':
                 respond_hg_summary(user_id, call.id)
@@ -533,7 +545,7 @@ def callback_query(call):
 
 
 # Starting point of bot
-@bot.message_handler(func=check_user_group, commands=['add'])
+@bot.message_handler(func=check_user_group, commands=['add', 'start'])
 def select_group(message):
     try:
         user_id = message.from_user.id
@@ -601,7 +613,7 @@ def handle_generic_messages(message):
                 group_members = get_members(group_id)
                 bot.send_message(user_id, f'Выбранная дата: {format_date(visit_date)}', reply_markup=ReplyKeyboardRemove())
                 visit_menu = get_visit_markup(group_members)
-                bot.send_message(user_id, f'Отметь посещения за {format_date(visit_date)} (при присутствии нажми ✅, при отсутствии нажми 🚫 и выбери причину отсутствия), а затем нажми кнопку «Подтвердить отметки»', reply_markup=visit_menu)
+                bot.send_message(user_id, f'Отметь посещения за {format_date(visit_date)} (при присутствии нажми ✅, при отсутствии нажми 🚫 и выбери причину отсутствия).', reply_markup=visit_menu)
                 set_user_mode(user_id, MARK_VISITORS)
                 DATES[user_id] = visit_date
             else:
@@ -610,6 +622,10 @@ def handle_generic_messages(message):
         elif user_mode == MARK_VISITORS:
             reason_for_db = list(filter(lambda reason: reason[1] == message.text, REASONS.values()))[0][0]
             VISITORS[user_id][ACTIVE_REASONS[user_id]]['reason'] = reason_for_db
+            if group_members_checked(user_id):
+                bot.send_message(user_id, f'Отлично! Теперь нажми «Подтвердить отметки»')
+            else:
+                bot.send_message(user_id, f'{ACTIVE_REASONS[user_id]}: {reason_for_db}\nПродолжай отмечать дальше.')
         elif user_mode == GUESTS:
             bot.send_message(user_id, f'Добавлен гость {message.text}')
             add_guest_vist(user_id, leader, message.text)
