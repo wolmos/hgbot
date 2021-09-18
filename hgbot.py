@@ -13,10 +13,10 @@ logger.add("debug.log", format="{time} {level} {message}", level="INFO", rotatio
 
 # States from certain range. States are kept in memory, lost if bot if restarted!
 USER_STATES = defaultdict(int)
-SELECT_GROUP, DATE, MARK_VISITORS, GUESTS, HG_SUMMARY, HG_SUMMARY_CONFIRM, \
+SELECT_GROUP, DATE, MARK_VISITORS, GROUP_DID_NOT_GATHER_CONFIRM, GUESTS, HG_SUMMARY, HG_SUMMARY_CONFIRM, \
 TESTIMONIES, TESTIMONIES_INPUT, TESTIMONIES_CONFIRM, PREACHER, \
 DISTRIBUTED_PEOPLE, DISTRIBUTED_PEOPLE_INPUT, DISTRIBUTED_PEOPLE_CONFIRM, \
-PERSONAL_MEETING, PERSONAL_MEETING_INPUT, PERSONAL_MEETING_CONFIRM, FINISH_ALL = range(17)
+PERSONAL_MEETING, PERSONAL_MEETING_INPUT, PERSONAL_MEETING_CONFIRM, FINISH_ALL = range(18)
 
 # For each user, the current group he is working on (one user can edit different groups)
 USER_CURRENT_GROUPS = defaultdict(int)
@@ -126,6 +126,7 @@ def get_visit_markup(members):
         markup.row(InlineKeyboardButton(f"✅", callback_data="{}: +".format(member)),
                    InlineKeyboardButton(f"🚫", callback_data="{}: -".format(member)))
     markup.row(InlineKeyboardButton('Подтвердить отметки', callback_data='REVIEW'))
+    markup.row(InlineKeyboardButton('Группа не прошла', callback_data='GROUP_DID_NOT_GATHER'))
     #     markup.row(InlineKeyboardButton('Добавить гостя', callback_data='ADD_GUEST'))
     return markup
 
@@ -305,6 +306,12 @@ def respond_select_date(bot, user_id, username, group_id):
                      'Выбери дату из списка или отправь дату в формате ДД/ММ/ГГ (03/09/21)', reply_markup=dates_menu)
 
 
+def respond_mark_visits(user_id, visit_date, group_members):
+    visit_menu = get_visit_markup(group_members)
+    bot.send_message(user_id, f'Отметь посещения за {format_date(visit_date)} (при присутствии нажми ✅, при отсутствии нажми 🚫 и выбери причину отсутствия). Если группа не состоялась, нажми «Группа не прошла».', reply_markup=visit_menu)
+    set_user_mode(user_id, MARK_VISITORS)
+
+
 def respond_review(bot, leader, user_id, call_id):
     if group_members_checked(user_id):
         df = get_visitors_df(user_id)
@@ -356,6 +363,13 @@ def respond_visitor_selection(bot, leader, user_id, call_id, call_data):
             bot.send_message(user_id, f'{name}: ✅\nПродолжай отмечать дальше.')
 
 
+def respond_confirm_did_not_gather(user_id):
+    set_user_mode(user_id, GROUP_DID_NOT_GATHER_CONFIRM)
+    confirm_markup = get_confirm_yes_no_markup()
+    bot.send_message(user_id, 'Группа действительно не прошла на этой неделе?',
+                     reply_markup=confirm_markup)
+
+
 def respond_hg_summary(user_id, call_id):
     set_user_mode(user_id, HG_SUMMARY)
     bot.send_message(user_id, 'Опиши, о чем была духовная часть (3–4 тезиса)', reply_markup=ReplyKeyboardRemove())
@@ -374,7 +388,7 @@ def respond_distributed_people(user_id):
     set_user_mode(user_id, DISTRIBUTED_PEOPLE)
     distributed_people_markup = get_distributed_people_markup()
     bot.send_message(user_id,
-                     'Если у тебя есть люди, которых тебе распределили вышестоящие лидеры — расскажи, какая ситуация с ними?',
+                     'Есть ли у тебя на домашней группе люди, которых тебе передали в течение последнего месяца? Если есть, рассажи немного о коммуникации с ними.',
                      reply_markup=distributed_people_markup)
 
 
@@ -524,12 +538,27 @@ def callback_query(call):
             elif call.data == 'NO':
                 bot.answer_callback_query(call.id)
                 respond_input_distributed_people(user_id)
+        elif user_mode == GROUP_DID_NOT_GATHER_CONFIRM:
+            group_members = get_members(group_id)
+            if call.data == 'YES':
+                bot.answer_callback_query(call.id)
+                for group_member in group_members:
+                    VISITORS[user_id][group_member] = {'status': '-', 'leader': leader, 'reason': 'Группа не прошла'}
+                df = get_visitors_df(user_id)
+                logger.info(f'Saving the DF with {len(group_members)} size')
+                db_access.save_visitors_to_db(df, ENGINE)
+                respond_finish(user_id)
+            elif call.data == 'NO':
+                bot.answer_callback_query(call.id)
+                respond_mark_visits(user_id, DATES[user_id], group_members)
         else:
             if call.data == 'REVIEW':
                 # bot.edit_message(user_id, reply_markup=ReplyKeyboardRemove())
                 respond_review(bot, leader, user_id, call.id)
             elif call.data == 'COMPLETE_VISITORS':
                 respond_complete(bot, group_id, user_id, call.id)
+            elif call.data == 'GROUP_DID_NOT_GATHER':
+                respond_confirm_did_not_gather(user_id)
             # should not fall here if wrong user mode
             elif call.data != "TITLE":
                 respond_visitor_selection(bot, leader, user_id, call.id, call.data)
@@ -612,10 +641,8 @@ def handle_generic_messages(message):
             if visit_date:
                 group_members = get_members(group_id)
                 bot.send_message(user_id, f'Выбранная дата: {format_date(visit_date)}', reply_markup=ReplyKeyboardRemove())
-                visit_menu = get_visit_markup(group_members)
-                bot.send_message(user_id, f'Отметь посещения за {format_date(visit_date)} (при присутствии нажми ✅, при отсутствии нажми 🚫 и выбери причину отсутствия).', reply_markup=visit_menu)
-                set_user_mode(user_id, MARK_VISITORS)
                 DATES[user_id] = visit_date
+                respond_mark_visits(user_id, visit_date, group_members)
             else:
                 select_date(message)
 
