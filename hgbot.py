@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 import babel.dates
 import random
 
-logger.add("debug.log", format="{time} {level} {message}", level="INFO", rotation="3 MB", compression="zip")
+logger.add("debug.log", format="{time} {level} {message}", level="DEBUG", rotation="3 MB", compression="zip")
 
 # States from certain range. States are kept in memory, lost if bot if restarted!
 USER_STATES = defaultdict(int)
@@ -251,7 +251,11 @@ def get_questions_df(user_id):
 
 
 def add_guest_vist(user_id, leader, guest):
-    GUEST_VISITORS[user_id].append({'status': '+', 'leader': leader, 'guest': True, 'name': guest})
+    existing_guest_names = set(map(lambda x: x['name'], GUEST_VISITORS[user_id]))
+    if guest in existing_guest_names:
+        logger.info(f'Guest {guest} has been already added')
+    else:
+        GUEST_VISITORS[user_id].append({'status': '+', 'leader': leader, 'guest': True, 'name': guest})
 
 
 def add_summary(user_id, group_info, summary):
@@ -629,6 +633,7 @@ def handle_generic_messages(message):
         username = user_info['username']
         user_mode = get_user_mode(user_id)
         logger.info(f'[User {user_id} (@{username})] Handling inbound message. State = {user_mode}')
+        logger.debug(f'Inbound message: {message.text}')
 
         group_id = get_current_group_id(user_id)
         group_info = get_group_info(user_info, group_id)
