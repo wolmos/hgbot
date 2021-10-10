@@ -3,6 +3,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 import config
 import db_access
+import send_reminders
 from loguru import logger
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
@@ -54,6 +55,7 @@ GROUP_ICONS = ['🍏', '🍒', '🍉', '🍍', '🥥', '🍑', '🍇', '🫑', '
 def update_user_id(username, user_id):
     USERS[username]['user_id'] = user_id
     USER_ID_MAP[user_id] = username
+    db_access.save_user_data(username, user_id, ENGINE)
 
 
 def update_user_current_group(username, group_id):
@@ -442,7 +444,7 @@ def respond_confirm_personal_meetings_feedback(user_id):
                      reply_markup=confirm_personal_meetings_markup)
 
 def get_thank_you_message():
-    variants = ['«Еще говорит ему в другой раз: Симон Ионин! любишь ли ты Меня? Петр говорит Ему: так, Господи! Ты знаешь, что я люблю Тебя. Иисус говорит ему: паси овец Моих.»\nОт Иоанна святое благовествование 21:16 SYNO\n\nСпасибо что и ты любишь Иисуса🙌🏽',
+    variants = ['«Еще говорит ему в другой раз: Симон Ионин! любишь ли ты Меня? Петр говорит Ему: так, Господи! Ты знаешь, что я люблю Тебя. Иисус говорит ему: паси овец Моих.»\nОт Иоанна святое благовествование 21:16 SYNO\n\nСпасибо, что и ты любишь Иисуса🙌🏽',
               'Ты сделал маленький, но очень важный шаг к росту своей дг🔥', '«Итак, братия мои возлюбленные, будьте тверды, непоколебимы, всегда преуспевайте в деле Господнем, зная, что труд ваш не тщетен пред Господом.»\nПервое послание к Коринфянам 15:58 SYNO\n\nТвой труд ценен, спасибо за твоё служение!',
               'При заполнении отчета не пострадало ни одно дерево!😂', 'Спасибо тебе за твое служение для Божьего царства. Твоя работа — очень важная часть нашей церкви, и мы ценим тебя как служителя и как друга!☺️']
     feedback = 'Вопросы и предложения по поводу бота можно адресовать @sasha_ab, постараемся решить проблему 🙂'
@@ -622,6 +624,19 @@ def select_date(message):
 
     except Exception as e:
         capture_exception(e)
+        logger.exception(e)
+
+
+@bot.message_handler(func=check_user_group, regexp='Разослать напоминания')
+def process_reminders(message):
+    try:
+        logger.info('Starting reminders...')
+        allowed_usernames = [e[0] for e in db_access.get_allowed_reminder_usernames(ENGINE)]
+        logger.info('Allowed usernames: ' + ','.join(allowed_usernames))
+        df = send_reminders.get_users_for_reminder(config.min_age_to_send_reminder_in_days)
+        sent_to = send_reminders.process_reminders(df, allowed_usernames)
+        bot.reply_to(message, f'Разосланы напоминания лидерам: ' + ', '.join(sent_to))
+    except Exception as e:
         logger.exception(e)
 
 

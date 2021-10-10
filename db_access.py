@@ -4,6 +4,8 @@ VISITORS_TABLE = 'data_for_bot_visitors'
 USERNAMES_TABLE = 'data_for_bot_usernames'
 VISITS_TABLE = 'data_from_bot_visitors'
 QUESTIONS_TABLE = 'data_from_bot_questions'
+USERS_TABLE = 'data_from_bot_users'
+ALLOWED_REMINDER_USERNAMES_TABLE = 'allowed_reminder_usernames'
 
 
 def select_leader_usernames(engine):
@@ -42,3 +44,25 @@ def get_leader_guests(leader, engine):
 def get_group_guests(group_id, engine):
     return [m[0] for m in list(engine.execute(
         f"SELECT distinct(name) FROM {VISITS_TABLE} WHERE type_person='Гость' AND id_hg='{group_id}'"))]
+
+
+def get_user_data(username, engine):
+    return list(engine.execute(
+        f"SELECT telegram_username, telegram_uid, user_state FROM {USERS_TABLE} WHERE telegram_username='{username}'"))
+
+
+def save_user_data(telegram_username, telegram_uid, engine):
+    engine.execute(f"INSERT INTO {USERS_TABLE} (telegram_username, telegram_uid) VALUES ('{telegram_username}', {telegram_uid}) ON CONFLICT (telegram_username) DO UPDATE SET telegram_uid = {telegram_uid}, updated_ts = now()")
+
+
+def get_last_visits(engine):
+    sql = "select n.id_hg as id_hg, max(leader) as leader, max(v.date) as max_date, " \
+          "replace(split_part(max(n.usernames), ',', 1), '@', '') as leader_username " \
+          "from data_for_bot_usernames n " \
+          "left join data_from_bot_visitors v on n.id_hg = v.id_hg " \
+          "group by n.id_hg"
+    return pd.read_sql(sql, engine)
+
+
+def get_allowed_reminder_usernames(engine):
+    return list(engine.execute(f"SELECT telegram_username FROM {ALLOWED_REMINDER_USERNAMES_TABLE}"))
