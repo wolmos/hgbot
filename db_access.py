@@ -6,6 +6,8 @@ VISITS_TABLE = 'data_from_bot_visitors'
 QUESTIONS_TABLE = 'data_from_bot_questions'
 USERS_TABLE = 'data_from_bot_users'
 ALLOWED_REMINDER_USERNAMES_TABLE = 'allowed_reminder_usernames'
+MASTER_DATA_HISTORY_TABLE = 'master_data_history'
+KEY_VALUE_TABLE = 'key_value_storage'
 
 
 def select_leader_usernames(engine):
@@ -58,11 +60,33 @@ def save_user_data(telegram_username, telegram_uid, engine):
 def get_last_visits(engine):
     sql = "select n.id_hg as id_hg, max(leader) as leader, max(v.date) as max_date, " \
           "replace(split_part(max(n.usernames), ',', 1), '@', '') as leader_username " \
-          "from data_for_bot_usernames n " \
-          "left join data_from_bot_visitors v on n.id_hg = v.id_hg " \
+          f"from {USERNAMES_TABLE} n " \
+          f"left join {VISITS_TABLE} v on n.id_hg = v.id_hg " \
           "group by n.id_hg"
     return pd.read_sql(sql, engine)
 
 
 def get_allowed_reminder_usernames(engine):
     return list(engine.execute(f"SELECT telegram_username FROM {ALLOWED_REMINDER_USERNAMES_TABLE}"))
+
+
+def get_master_data_for_today(engine):
+    sql = f"select g.id_hg as id_hg, max(m.status_of_hg) as status, max(m.type_age) as type_age from {USERNAMES_TABLE} g " \
+          f"left join {MASTER_DATA_HISTORY_TABLE} m on g.id_hg = m.id_hg " \
+          "and m.valid_from <= now() and m.valid_to >= now() " \
+          "group by g.id_hg"
+    return pd.read_sql(sql, engine)
+
+
+def get_multi_key_value(key, engine):
+    sql = f"select value from {KEY_VALUE_TABLE} where key = '{key}' and is_enabled order by multivalue_seq_number"
+    return list(map(lambda x: x[0].replace('\\n', '\n'), engine.execute(sql)))
+
+
+def get_single_key_value(key, engine):
+    multi_key_value = get_multi_key_value(key, engine)
+    if len(multi_key_value) != 1:
+        raise ValueError(f"{len(multi_key_value)} enabled values found for key {key} (expected 1)")
+    return multi_key_value[0]
+
+

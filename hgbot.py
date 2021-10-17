@@ -32,6 +32,9 @@ DISTRIBUTED_PEOPLE_FEEDBACK = defaultdict(None)
 TESTIMONY = defaultdict(None)
 PERSONAL_MEETINGS_FEEDBACK = defaultdict(None)
 
+THANK_YOU_MESSAGES = ['Спасибо тебе!']  # just in case if nothing found in the DB
+FEEDBACK_MESSAGE = ''
+
 ENGINE = create_engine(f'postgresql://{config.db_user}:{config.db_password}@{config.db_hostname}:{config.db_port}/{config.db_name}?sslmode=require')
 
 import telebot
@@ -45,9 +48,22 @@ sentry_sdk.init(config.sentry_url)
 from sentry_sdk import capture_exception
 
 # {username: {'group_id': , 'leader': , 'username': 'uid': (after first reaction from tg)}}
-USERS = db_access.select_leader_usernames(ENGINE)
+USERS = {}
 USER_ID_MAP = {}  # user_id: username
 GROUP_ICONS = ['🍏', '🍒', '🍉', '🍍', '🥥', '🍑', '🍇', '🫑', '🥝', '🍋']
+
+
+# ================INITIALIZATION================
+
+def init():
+    global USERS, THANK_YOU_MESSAGES, FEEDBACK_MESSAGE
+
+    logger.info('Init started')
+    USERS = db_access.select_leader_usernames(ENGINE)
+    logger.debug(f"Got {len(USERS)} users from DB")
+    THANK_YOU_MESSAGES = db_access.get_multi_key_value('thank_you_message', ENGINE)
+    FEEDBACK_MESSAGE = db_access.get_single_key_value('feedback_message', ENGINE)
+    logger.info('Init finished')
 
 
 # ================HELPER METHODS================
@@ -67,7 +83,7 @@ def check_user_group(message):
     for username, user_info in USERS.items():
         if source_username == username:
             return user_info
-    bot.send_message(message.from_user.id, 'Привет! К сожалению у тебя нет доступа')
+    bot.send_message(message.from_user.id, 'Привет! К сожалению, у тебя нет доступа')
     logger.warning(f'The user @{source_username} does not have access')
     return False
 
@@ -443,12 +459,10 @@ def respond_confirm_personal_meetings_feedback(user_id):
     bot.send_message(user_id, 'Про встречи написано правильно?',
                      reply_markup=confirm_personal_meetings_markup)
 
+
 def get_thank_you_message():
-    variants = ['«Еще говорит ему в другой раз: Симон Ионин! любишь ли ты Меня? Петр говорит Ему: так, Господи! Ты знаешь, что я люблю Тебя. Иисус говорит ему: паси овец Моих.»\nОт Иоанна святое благовествование 21:16 SYNO\n\nСпасибо, что и ты любишь Иисуса🙌🏽',
-              'Ты сделал маленький, но очень важный шаг к росту своей дг🔥', '«Итак, братия мои возлюбленные, будьте тверды, непоколебимы, всегда преуспевайте в деле Господнем, зная, что труд ваш не тщетен пред Господом.»\nПервое послание к Коринфянам 15:58 SYNO\n\nТвой труд ценен, спасибо за твоё служение!',
-              'При заполнении отчета не пострадало ни одно дерево!😂', 'Спасибо тебе за твое служение для Божьего царства. Твоя работа — очень важная часть нашей церкви, и мы ценим тебя как служителя и как друга!☺️']
-    feedback = 'Вопросы и предложения по поводу бота можно адресовать @sasha_ab, постараемся решить проблему 🙂'
-    return random.choice(variants) + '\n\n' + feedback
+    return random.choice(THANK_YOU_MESSAGES) + '\n\n' + FEEDBACK_MESSAGE
+
 
 def respond_finish(user_id):
     set_user_mode(user_id, FINISH_ALL)
@@ -693,4 +707,5 @@ def handle_generic_messages(message):
         logger.exception(e)
 
 
+init()
 bot.polling()
