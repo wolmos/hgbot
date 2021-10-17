@@ -87,6 +87,7 @@ def check_user_group(message):
     logger.warning(f'The user @{source_username} does not have access')
     return False
 
+
 def get_leader_members(username):
     group_id = USER_CURRENT_GROUPS[username]
     if group_id in MEMBERS:
@@ -126,6 +127,7 @@ def parse_date(text):
 
 def format_date(date):
     return babel.dates.format_date(date, 'd MMMM yyyy г.', 'ru')
+
 
 def get_user_mode(user_id):
     return USER_STATES[user_id]
@@ -283,8 +285,10 @@ def add_summary(user_id, group_info, summary):
 def add_distributed_people(user_id, feedback):
     DISTRIBUTED_PEOPLE_FEEDBACK[user_id] = feedback
 
+
 def add_testimonies(user_id, testimony):
     TESTIMONY[user_id] = testimony
+
 
 def add_personal_meetings_feedback(user_id, personal_meetings_feedback):
     PERSONAL_MEETINGS_FEEDBACK[user_id] = personal_meetings_feedback

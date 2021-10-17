@@ -45,7 +45,7 @@ def get_leader_guests(leader, engine):
 
 def get_group_guests(group_id, engine):
     return [m[0] for m in list(engine.execute(
-        f"SELECT distinct(name) FROM {VISITS_TABLE} WHERE type_person='Гость' AND id_hg='{group_id}'"))]
+        f"SELECT distinct(name) FROM {VISITS_TABLE} WHERE type_person='Гость' AND id_hg='{group_id}' AND date > current_date - interval '60 day'"))]
 
 
 def get_user_data(username, engine):
