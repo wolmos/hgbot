@@ -118,7 +118,7 @@ def parse_date(text):
         return DATES[text]()
     else:
         try:
-            visit_date = datetime.strptime(text, '%d/%m/%y')
+            visit_date = datetime.strptime(text, '%d/%m/%y').date()
             return visit_date
         except Exception as e:
             logger.error(e)
@@ -328,6 +328,14 @@ def respond_select_date(bot, user_id, username, group_id):
                      'Выбери дату из списка или отправь дату в формате ДД/ММ/ГГ (03/09/21)', reply_markup=dates_menu)
 
 
+def respond_invalid_date_format(message):
+    bot.reply_to(message, 'Я не понимаю, что это за дата 🤷\nПопробуй еще раз. Дата должна быть в формате ДД/ММ/ГГ (03/09/21)')
+
+
+def respond_date_is_in_future(message):
+    bot.reply_to(message, 'Нельзя указать дату в будущем, попробуй ввести еще раз')
+
+
 def respond_mark_visits(user_id, visit_date, group_members):
     visit_menu = get_visit_markup(group_members)
     bot.send_message(user_id, f'Отметь посещения за {format_date(visit_date)} (при присутствии нажми ✅, при отсутствии нажми 🚫 и выбери причину отсутствия). Если группа не состоялась, нажми «Группа не прошла».', reply_markup=visit_menu)
@@ -430,6 +438,7 @@ def respond_testimonies(user_id):
     set_user_mode(user_id, TESTIMONIES)
     testimonies_markup = get_distributed_people_markup()
     bot.send_message(user_id, 'Были ли какие-нибудь свидетельства?', reply_markup=testimonies_markup)
+
 
 def respond_input_testimonies(user_id):
     set_user_mode(user_id, TESTIMONIES_INPUT)
@@ -673,12 +682,16 @@ def handle_generic_messages(message):
         if user_mode == DATE:
             visit_date = parse_date(message.text)
             if visit_date:
-                group_members = get_members(group_id)
-                bot.send_message(user_id, f'Выбранная дата: {format_date(visit_date)}', reply_markup=ReplyKeyboardRemove())
-                DATES[user_id] = visit_date
-                respond_mark_visits(user_id, visit_date, group_members)
+                if visit_date > datetime.now().date():
+                    respond_date_is_in_future(message)
+                else:
+                    group_members = get_members(group_id)
+                    bot.send_message(user_id, f'Выбранная дата: {format_date(visit_date)}', reply_markup=ReplyKeyboardRemove())
+                    DATES[user_id] = visit_date
+                    respond_mark_visits(user_id, visit_date, group_members)
             else:
-                select_date(message)
+                respond_invalid_date_format(message)
+                #select_date(message)
 
         elif user_mode == MARK_VISITORS:
             reason_for_db = list(filter(lambda reason: reason[1] == message.text, REASONS.values()))[0][0]
