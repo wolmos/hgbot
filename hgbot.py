@@ -336,6 +336,10 @@ def respond_invalid_date_format(message):
     bot.reply_to(message, 'Я не понимаю, что это за дата 🤷\nПопробуй еще раз. Дата должна быть в формате ДД/ММ/ГГ (03/09/21)')
 
 
+def respond_guest_name_too_long(message):
+    bot.reply_to(message, f"К сожалению, имя гостя {message.text} слишком длинное, максимально можно ввести 32 символа 😐\nПопробуй сократить имя гостя и ввести его еще раз.")
+
+
 def respond_date_is_in_future(message):
     bot.reply_to(message, 'Нельзя указать дату в будущем, попробуй ввести еще раз')
 
@@ -705,8 +709,11 @@ def handle_generic_messages(message):
             else:
                 bot.send_message(user_id, f'{ACTIVE_REASONS[user_id]}: {reason_for_db}\nПродолжай отмечать дальше.')
         elif user_mode == GUESTS:
-            bot.send_message(user_id, f'Добавлен гость {message.text}')
-            add_guest_vist(user_id, leader, message.text)
+            if len(message.text) > 32:
+                respond_guest_name_too_long(message)
+            else:
+                bot.send_message(user_id, f'Добавлен гость {message.text}')
+                add_guest_vist(user_id, leader, message.text)
         elif user_mode == HG_SUMMARY:
             add_summary(user_id, group_info, message.text)
             respond_confirm_hg_summary(user_id)

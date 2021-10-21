@@ -42,8 +42,11 @@ def process_reminders(to_remind_df, allowed_usernames):
 
         if len(user_data) > 0 and f'@{leader_username}' in allowed_usernames:
             telegram_uid = user_data[0][1]
-            send_message(telegram_uid, reminder_message)
-            sent_to.append(f'{leader} (@{leader_username})')
+            try:
+                send_message(telegram_uid, reminder_message)
+                sent_to.append(f'{leader} (@{leader_username})')
+            except Exception as e:
+                logger.exception(e)
     return sent_to
 
 
