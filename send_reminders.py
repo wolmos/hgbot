@@ -14,16 +14,15 @@ import telebot
 bot = telebot.TeleBot(config.bot_token)
 
 
-def get_users_for_reminder(days_until_reminder):
+def get_users_for_reminder():
     df_last_visits = db_access.get_last_visits(ENGINE)
     df_master_data = db_access.get_master_data_for_today(ENGINE)
     df_all = pd.merge(df_last_visits, df_master_data, on='id_hg')
-    to_remind = df_all[(df_all['max_date'] < date.today() - timedelta(days=days_until_reminder)) & (df_all['status'] == 'открыта')]
-    #to_remind = df_last_visits[df_last_visits['max_date'] < date.today() - timedelta(days=days_until_reminder)]
+    to_remind = df_all[(df_all['max_date'] < date.today() - timedelta(days=date.today().weekday() + 7)) & (df_all['status'] == 'открыта')]
     return to_remind
 
 
-def process_reminders(to_remind_df, allowed_usernames):
+def process_reminders(to_remind_df):
     logger.info('Started processing reminders')
     sent_to = []
     reminder_message_templates = db_access.get_multi_key_value('reminder_template', ENGINE)
@@ -40,13 +39,15 @@ def process_reminders(to_remind_df, allowed_usernames):
         reminder_message = reminder_message_template.format(id_hg=id_hg, date_text=date_text)
         user_data = db_access.get_user_data(leader_username, ENGINE)
 
-        if len(user_data) > 0 and f'@{leader_username}' in allowed_usernames:
+        #if len(user_data) > 0 and f'@{leader_username}' in allowed_usernames:
+        if len(user_data) > 0:
             telegram_uid = user_data[0][1]
             try:
                 send_message(telegram_uid, reminder_message)
                 sent_to.append(f'{leader} (@{leader_username})')
             except Exception as e:
                 logger.exception(e)
+    logger.info('Finished processing reminders')
     return sent_to
 
 

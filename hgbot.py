@@ -4,13 +4,35 @@ from datetime import datetime, timedelta
 import config
 import db_access
 import send_reminders
+import reminder_thread
+import logging
 from loguru import logger
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 import babel.dates
 import random
 
-logger.add("debug.log", format="{time} {level} {message}", level="DEBUG", rotation="3 MB", compression="zip")
+
+class InterceptHandler(logging.Handler):
+    def emit(self, record):
+        # Get corresponding Loguru level if it exists
+        try:
+            level = logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+
+        # Find caller from where originated the logged message
+        frame, depth = logging.currentframe(), 2
+        while frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back
+            depth += 1
+
+        logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
+
+# Intercepting log messages from third-party libs (e.g. Telebot) that have level INFO (20) or higher
+logging.basicConfig(handlers=[InterceptHandler()], level=20)
+
+logger.add("debug.log", format="{time} {level: <8} [{thread.name: <16}] {message}", level="DEBUG", rotation="3 MB", compression="zip")
 
 # States from certain range. States are kept in memory, lost if bot if restarted!
 USER_STATES = defaultdict(int)
@@ -662,11 +684,10 @@ def select_date(message):
 def process_reminders(message):
     try:
         logger.info('Starting reminders...')
-        allowed_usernames = [e[0] for e in db_access.get_allowed_reminder_usernames(ENGINE)]
-        logger.info('Allowed usernames: ' + ','.join(allowed_usernames))
-        df = send_reminders.get_users_for_reminder(config.min_age_to_send_reminder_in_days)
-        sent_to = send_reminders.process_reminders(df, allowed_usernames)
+        df = send_reminders.get_users_for_reminder()
+        sent_to = send_reminders.process_reminders(df)
         bot.reply_to(message, f'Разосланы напоминания лидерам: ' + ', '.join(sent_to))
+        logger.info(f'Sent reminders to {len(sent_to)} leaders')
     except Exception as e:
         logger.exception(e)
 
@@ -732,4 +753,8 @@ def handle_generic_messages(message):
 
 
 init()
+
+reminder_thread = reminder_thread.ReminderThread()
+reminder_thread.start()
+
 bot.polling()

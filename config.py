@@ -15,6 +15,3 @@ bot_token = os.environ['BOT_TOKEN']
 
 # Sentry
 sentry_url = os.environ['SENTRY_URL']
-
-# Other
-min_age_to_send_reminder_in_days = 7
