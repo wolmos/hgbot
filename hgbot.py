@@ -284,10 +284,10 @@ def get_questions_df(user_id):
         'name_leader': group_info['leader'],
         'id_hg': group_id[:7],
         'date': DATES[user_id],
-        'summary': SUMMARY[user_id],
-        'distributed_people_feedback': DISTRIBUTED_PEOPLE_FEEDBACK[user_id],
-        'testimony': TESTIMONY[user_id],
-        'personal_meeting': PERSONAL_MEETINGS_FEEDBACK[user_id]
+        'summary': SUMMARY.get(user_id),
+        'distributed_people_feedback': DISTRIBUTED_PEOPLE_FEEDBACK.get(user_id),
+        'testimony': TESTIMONY.get(user_id),
+        'personal_meeting': PERSONAL_MEETINGS_FEEDBACK.get(user_id)
     }])
     return df
 
@@ -448,7 +448,7 @@ def respond_distributed_people(user_id):
     set_user_mode(user_id, DISTRIBUTED_PEOPLE)
     distributed_people_markup = get_distributed_people_markup()
     bot.send_message(user_id,
-                     'Есть ли у тебя на домашней группе люди, которых тебе передали в течение последнего месяца? Если есть, рассажи немного о коммуникации с ними.',
+                     'Есть ли у тебя на домашней группе люди, которых тебе передали в течение последнего месяца?',
                      reply_markup=distributed_people_markup)
 
 

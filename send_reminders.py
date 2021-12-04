@@ -14,11 +14,16 @@ import telebot
 bot = telebot.TeleBot(config.bot_token)
 
 
+def get_actual_master_data():
+    df = db_access.get_master_data_for_today(ENGINE)
+    return df[df['status'] == 'открыта']
+
+
 def get_users_for_reminder():
     df_last_visits = db_access.get_last_visits(ENGINE)
-    df_master_data = db_access.get_master_data_for_today(ENGINE)
+    df_master_data = get_actual_master_data()
     df_all = pd.merge(df_last_visits, df_master_data, on='id_hg')
-    to_remind = df_all[(df_all['max_date'] < date.today() - timedelta(days=date.today().weekday() + 7)) & (df_all['status'] == 'открыта')]
+    to_remind = df_all[df_all['max_date'] < date.today() - timedelta(days=date.today().weekday() + 7)]
     return to_remind
 
 
@@ -49,6 +54,32 @@ def process_reminders(to_remind_df):
                 logger.exception(e)
     logger.info('Finished processing reminders')
     return sent_to
+
+
+def send_reminder_before_hg(id_hg, time_of_hg):
+    message_templates = db_access.get_multi_key_value('reminder_before_hg_template', ENGINE)
+    message_template = random.choice(message_templates)
+    message = message_template.format(time_of_hg=time_of_hg)
+    send_reminder_before_after_hg(id_hg, message)
+
+
+def send_reminder_after_hg(id_hg):
+    message_templates = db_access.get_multi_key_value('reminder_after_hg_template', ENGINE)
+    message_template = random.choice(message_templates)
+    send_reminder_before_after_hg(id_hg, message_template)
+
+
+def send_reminder_before_after_hg(id_hg, message):
+    leader_username = db_access.get_leader_username_for_hg(id_hg, ENGINE)
+    allowed_usernames = db_access.get_allowed_reminder_usernames(ENGINE)
+    user_data = db_access.get_user_data(leader_username, ENGINE)
+
+    if leader_username is not None and len(user_data) > 0 and f'@{leader_username}' in allowed_usernames:
+        telegram_uid = user_data[0][1]
+        try:
+            send_message(telegram_uid, message)
+        except Exception as e:
+            logger.exception(e)
 
 
 def send_message(telegram_uid, reminder_message):

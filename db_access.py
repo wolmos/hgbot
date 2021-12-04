@@ -66,8 +66,12 @@ def get_last_visits(engine):
     return pd.read_sql(sql, engine)
 
 
+def get_leader_username_for_hg(id_hg, engine):
+    return list(engine.execute(f"SELECT replace(split_part(max(usernames), ',', 1), '@', '') as leader_username from {USERNAMES_TABLE} where id_hg='{id_hg}'"))[0][0]
+
+
 def get_allowed_reminder_usernames(engine):
-    return list(engine.execute(f"SELECT telegram_username FROM {ALLOWED_REMINDER_USERNAMES_TABLE}"))
+    return [m[0] for m in list(engine.execute(f"SELECT telegram_username FROM {ALLOWED_REMINDER_USERNAMES_TABLE}"))]
 
 
 def get_master_data_for_today(engine):
