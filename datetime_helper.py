@@ -6,7 +6,7 @@ reminder_before_hg_offset = 0 # 24 hours before hg time
 reminder_after_hg_offset = 10800  # 3 hours after hg time
 
 min_hg_time = time.mktime(time.strptime('08:00', '%H:%M'))
-max_hg_time = time.mktime(time.strptime('20:59', '%H:%M'))
+max_hg_time = time.mktime(time.strptime('22:59', '%H:%M'))
 
 utc_offset = -10800 # time_str comes in UTC+3
 

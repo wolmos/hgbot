@@ -56,6 +56,8 @@ PERSONAL_MEETINGS_FEEDBACK = defaultdict(None)
 
 THANK_YOU_MESSAGES = ['Спасибо тебе!']  # just in case if nothing found in the DB
 FEEDBACK_MESSAGE = ''
+DATA_TOO_OLD_MESSAGE = 'К сожалению, данные устарели 😔 Пожалуйста, заполни отчет с начала.'
+DATA_TOO_OLD_MESSAGE_SHORT = 'Пожалуйста, заполни отчет с начала'
 
 ENGINE = create_engine(f'postgresql://{config.db_user}:{config.db_password}@{config.db_hostname}:{config.db_port}/{config.db_name}?sslmode=require')
 
@@ -88,6 +90,25 @@ def init():
     logger.info('Init finished')
 
 
+
+# ================MESSAGE SENDING================
+
+def bot_send_message(user_id, text, reply_markup=None):
+    logger.info(f'[send_message: user_id = {user_id}] {text}')
+    bot.send_message(user_id, text, reply_markup=reply_markup)
+
+
+def bot_reply_to(message, text):
+    logger.info(f'[reply_to: user_id = {message.from_user.id}] {text}')
+    bot.reply_to(message, text)
+
+
+def bot_answer_callback_query(call_id, call_data=None):
+    if call_data is not None:
+        logger.info(f'[answer_callback_query] {call_data}')
+    bot.answer_callback_query(call_id, call_data)
+
+
 # ================HELPER METHODS================
 
 def update_user_id(username, user_id):
@@ -105,7 +126,7 @@ def check_user_group(message):
     for username, user_info in USERS.items():
         if source_username == username:
             return user_info
-    bot.send_message(message.from_user.id, 'Привет! К сожалению, у тебя нет доступа')
+    bot_send_message(message.from_user.id, 'Привет! К сожалению, у тебя нет доступа')
     logger.warning(f'The user @{source_username} does not have access')
     return False
 
@@ -125,6 +146,10 @@ def get_members(group_id):
     members = db_access.select_group_members(group_id, ENGINE)
     MEMBERS[group_id] = members
     return members
+
+
+def check_current_group_id(user_id):
+    return user_id in USER_ID_MAP
 
 
 def get_current_group_id(user_id):
@@ -345,30 +370,30 @@ def respond_select_date(bot, user_id, username, group_id):
     update_user_current_group(username, group_id)
     user_info = USERS[username]
     group_info = get_group_info(user_info, group_id)
-    # bot.reply_to(message, f'Привет! Ты — {group_info["leader"]}, лидер группы {group_info["group_id"]}.')
+    # bot_reply_to(message, f'Привет! Ты — {group_info["leader"]}, лидер группы {group_info["group_id"]}.')
 
     dates_menu = get_dates_markup()
     set_user_mode(user_id, DATE)
-    bot.send_message(user_id,
+    bot_send_message(user_id,
                      f'Привет! Ты — {group_info["leader"]}, лидер группы {group_info["group_id"]}. '
                      'Выбери дату из списка или отправь дату в формате ДД/ММ/ГГ (03/09/21)', reply_markup=dates_menu)
 
 
 def respond_invalid_date_format(message):
-    bot.reply_to(message, 'Я не понимаю, что это за дата 🤷\nПопробуй еще раз. Дата должна быть в формате ДД/ММ/ГГ (03/09/21)')
+    bot_reply_to(message, 'Я не понимаю, что это за дата 🤷\nПопробуй еще раз. Дата должна быть в формате ДД/ММ/ГГ (03/09/21)')
 
 
 def respond_guest_name_too_long(message):
-    bot.reply_to(message, f"К сожалению, имя гостя {message.text} слишком длинное, максимально можно ввести 32 символа 😐\nПопробуй сократить имя гостя и ввести его еще раз.")
+    bot_reply_to(message, f"К сожалению, имя гостя {message.text} слишком длинное, максимально можно ввести 32 символа 😐\nПопробуй сократить имя гостя и ввести его еще раз.")
 
 
 def respond_date_is_in_future(message):
-    bot.reply_to(message, 'Нельзя указать дату в будущем, попробуй ввести еще раз')
+    bot_reply_to(message, 'Нельзя указать дату в будущем, попробуй ввести еще раз')
 
 
 def respond_mark_visits(user_id, visit_date, group_members):
     visit_menu = get_visit_markup(group_members)
-    bot.send_message(user_id, f'Отметь посещения за {format_date(visit_date)} (при присутствии нажми ✅, при отсутствии нажми 🚫 и выбери причину отсутствия). Если группа не состоялась, нажми «Группа не прошла».', reply_markup=visit_menu)
+    bot_send_message(user_id, f'Отметь посещения за {format_date(visit_date)} (при присутствии нажми ✅, при отсутствии нажми 🚫 и выбери причину отсутствия). Если группа не состоялась, нажми «Группа не прошла».', reply_markup=visit_menu)
     set_user_mode(user_id, MARK_VISITORS)
 
 
@@ -377,14 +402,14 @@ def respond_review(bot, leader, user_id, call_id):
         df = get_visitors_df(user_id)
         review_text = '\n'.join([f'{row["name"]}: {"✅" if row["status"] == "+" else "🚫"}'
                                  for i, row in df.iterrows()])
-        bot.send_message(user_id,
+        bot_send_message(user_id,
                          f'Все члены отмечены, но ещё есть возможность изменить ответы:\n\n{review_text}',
                          reply_markup=get_review_markup())
-        bot.answer_callback_query(call_id)
+        bot_answer_callback_query(call_id)
     # bot.send_document(user_id, df)
     else:
         missing = get_missing_group_members(user_id)
-        bot.answer_callback_query(call_id, 'Ещё не все члены отмечены: ' + ", ".join(missing))
+        bot_answer_callback_query(call_id, 'Ещё не все члены отмечены: ' + ", ".join(missing))
 
 
 def respond_complete(bot, group_id, user_id, call_id):
@@ -394,14 +419,14 @@ def respond_complete(bot, group_id, user_id, call_id):
     db_access.save_visitors_to_db(df, ENGINE)
     #     cleanup(user_id)
     logger.info('SAVED!')
-    bot.answer_callback_query(call_id, 'Все члены отмечены!')
+    bot_answer_callback_query(call_id, 'Все члены отмечены!')
     set_user_mode(user_id, GUESTS)
     guests = db_access.get_group_guests(group_id, ENGINE)
     guests_markup = get_guests_markup(guests)
-    bot.send_message(user_id,
+    bot_send_message(user_id,
                      'Переходим к добавлению гостей. Отправь в отдельных сообщениях имена новых гостей или выбери повторно посетивших из списка. Затем нажми «Завершить добавление гостей»',
                      reply_markup=guests_markup)
-    bot.answer_callback_query(call_id)
+    bot_answer_callback_query(call_id)
 
 
 def respond_visitor_selection(bot, leader, user_id, call_id, call_data):
@@ -409,93 +434,94 @@ def respond_visitor_selection(bot, leader, user_id, call_id, call_data):
     logger.info(f'Got them {name}')
     if ': -' in call_data:
         VISITORS[user_id][name] = {'status': '-', 'leader': leader}
-        bot.answer_callback_query(call_id, 'Укажи причину отсутствия')
+        bot_answer_callback_query(call_id, 'Укажи причину отсутствия')
         reasons_menu = get_reasons_markup()
         ACTIVE_REASONS[user_id] = name
-        bot.send_message(user_id, f'Укажи причину отсутствия {name}',
+        bot_send_message(user_id, f'Укажи причину отсутствия {name}',
                          reply_markup=reasons_menu)
     else:
-        bot.answer_callback_query(call_id, call_data)
+        bot_answer_callback_query(call_id, call_data)
         VISITORS[user_id][name] = {'status': '+', 'leader': leader}
         if group_members_checked(user_id):
-            bot.send_message(user_id, f'Отлично! Теперь нажми «Подтвердить отметки»')
+            bot_send_message(user_id, f'Отлично! Теперь нажми «Подтвердить отметки»')
         else:
-            bot.send_message(user_id, f'{name}: ✅\nПродолжай отмечать дальше.')
+            bot_send_message(user_id, f'{name}: ✅\nПродолжай отмечать дальше.')
 
 
-def respond_confirm_did_not_gather(user_id):
+def respond_confirm_did_not_gather(user_id, call_id):
     set_user_mode(user_id, GROUP_DID_NOT_GATHER_CONFIRM)
     confirm_markup = get_confirm_yes_no_markup()
-    bot.send_message(user_id, 'Группа действительно не прошла на этой неделе?',
+    bot_send_message(user_id, 'Группа действительно не прошла на этой неделе?',
                      reply_markup=confirm_markup)
+    bot_answer_callback_query(call_id)
 
 
 def respond_hg_summary(user_id, call_id):
     set_user_mode(user_id, HG_SUMMARY)
-    bot.send_message(user_id, 'Опиши, о чем была духовная часть (3–4 тезиса)', reply_markup=ReplyKeyboardRemove())
-    bot.answer_callback_query(call_id)
+    bot_send_message(user_id, 'Опиши, о чем была духовная часть (3–4 тезиса)', reply_markup=ReplyKeyboardRemove())
+    bot_answer_callback_query(call_id)
 
 
 def respond_confirm_hg_summary(user_id, call_id=None):
     set_user_mode(user_id, HG_SUMMARY_CONFIRM)
     confirm_hg_summary_markup = get_confirm_yes_no_markup()
-    bot.send_message(user_id, 'Духовная часть указана правильно?', reply_markup=confirm_hg_summary_markup)
+    bot_send_message(user_id, 'Духовная часть указана правильно?', reply_markup=confirm_hg_summary_markup)
     if call_id is not None:
-        bot.answer_callback_query(call_id)
+        bot_answer_callback_query(call_id)
 
 
 def respond_distributed_people(user_id):
     set_user_mode(user_id, DISTRIBUTED_PEOPLE)
     distributed_people_markup = get_distributed_people_markup()
-    bot.send_message(user_id,
+    bot_send_message(user_id,
                      'Есть ли у тебя на домашней группе люди, которых тебе передали в течение последнего месяца?',
                      reply_markup=distributed_people_markup)
 
 
 def respond_input_distributed_people(user_id):
     set_user_mode(user_id, DISTRIBUTED_PEOPLE_INPUT)
-    bot.send_message(user_id, 'Опиши, пожалуйста, ситуацию вкратце')
+    bot_send_message(user_id, 'Опиши, пожалуйста, ситуацию вкратце')
 
 
 def respond_confirm_distributed_people(user_id):
     set_user_mode(user_id, DISTRIBUTED_PEOPLE_CONFIRM)
     confirm_distributed_people_markup = get_confirm_yes_no_markup()
-    bot.send_message(user_id, 'Ситуация с распределенными людьми описана правильно?',
+    bot_send_message(user_id, 'Ситуация с распределенными людьми описана правильно?',
                      reply_markup=confirm_distributed_people_markup)
 
 
 def respond_testimonies(user_id):
     set_user_mode(user_id, TESTIMONIES)
     testimonies_markup = get_distributed_people_markup()
-    bot.send_message(user_id, 'Были ли какие-нибудь свидетельства?', reply_markup=testimonies_markup)
+    bot_send_message(user_id, 'Были ли какие-нибудь свидетельства?', reply_markup=testimonies_markup)
 
 
 def respond_input_testimonies(user_id):
     set_user_mode(user_id, TESTIMONIES_INPUT)
-    bot.send_message(user_id, 'Опиши, какие были свидетельства (например, Иванов Иван: Молились за исцеление...)')
+    bot_send_message(user_id, 'Опиши, какие были свидетельства (например, Иванов Иван: Молились за исцеление...)')
 
 
 def respond_confirm_testimonies(user_id):
     set_user_mode(user_id, TESTIMONIES_CONFIRM)
     confirm_testimonies_markup = get_confirm_yes_no_markup()
-    bot.send_message(user_id, 'Свидетельства описаны правильно?',
+    bot_send_message(user_id, 'Свидетельства описаны правильно?',
                      reply_markup=confirm_testimonies_markup)
 
 
 def respond_personal_meetings_feedback(user_id):
     set_user_mode(user_id, PERSONAL_MEETING)
     personal_meeting_markup = get_distributed_people_markup()
-    bot.send_message(user_id, 'Были ли личные встречи?', reply_markup=personal_meeting_markup)
+    bot_send_message(user_id, 'Были ли личные встречи?', reply_markup=personal_meeting_markup)
 
 def respond_input_personal_meetings_feedback(user_id):
     set_user_mode(user_id, PERSONAL_MEETING_INPUT)
-    bot.send_message(user_id, 'Расскажи, с кем были встречи')
+    bot_send_message(user_id, 'Расскажи, с кем были встречи')
 
 
 def respond_confirm_personal_meetings_feedback(user_id):
     set_user_mode(user_id, PERSONAL_MEETING_CONFIRM)
     confirm_personal_meetings_markup = get_confirm_yes_no_markup()
-    bot.send_message(user_id, 'Про встречи написано правильно?',
+    bot_send_message(user_id, 'Про встречи написано правильно?',
                      reply_markup=confirm_personal_meetings_markup)
 
 
@@ -505,7 +531,7 @@ def get_thank_you_message():
 
 def respond_finish(user_id):
     set_user_mode(user_id, FINISH_ALL)
-    bot.send_message(user_id, get_thank_you_message(), reply_markup=ReplyKeyboardRemove())
+    bot_send_message(user_id, get_thank_you_message(), reply_markup=ReplyKeyboardRemove())
 
 
 # Handles all clicks on inline buttons
@@ -517,6 +543,9 @@ def callback_query(call):
         user_mode = get_user_mode(user_id)
         logger.info(f'[User {user_id} (@{user_info["username"]})] Button Click: {call.data}, user mode {user_mode}')
 
+        if not check_current_group_id(user_id):
+            bot_answer_callback_query(call.id, DATA_TOO_OLD_MESSAGE_SHORT)
+            return
         group_id = get_current_group_id(user_id)
         group_info = get_group_info(user_info, group_id)
         leader = group_info['leader']
@@ -527,80 +556,80 @@ def callback_query(call):
                 db_access.save_visitors_to_db(guests_df, ENGINE)
                 guests_text = '\n'.join([row['name'] for i, row in guests_df.iterrows()])
                 if guests_text != '':
-                    bot.answer_callback_query(call.id)
-                    bot.send_message(user_id, f'Гости добавлены:\n\n{guests_text}',
+                    bot_answer_callback_query(call.id)
+                    bot_send_message(user_id, f'Гости добавлены:\n\n{guests_text}',
                                     reply_markup=ReplyKeyboardRemove())
                 else:
-                    bot.answer_callback_query(call.id)
-                    bot.send_message(user_id, f'Гостей не было',
+                    bot_answer_callback_query(call.id)
+                    bot_send_message(user_id, f'Гостей не было',
                                     reply_markup=ReplyKeyboardRemove())
                 respond_hg_summary(user_id, call.id)
                 # cleanup(user_id)
-            elif call.data != "TITLE":
+            elif call.data != 'TITLE' and call.data != 'COMPLETE_VISITORS':
                 logger.info(f'Guest added: {call.data}')
-                bot.answer_callback_query(call.id, call.data)
+                bot_answer_callback_query(call.id, call.data)
                 add_guest_vist(user_id, leader, call.data)
         # elif user_mode == HG_SUMMARY:
         # skip summary button click
         elif user_mode == HG_SUMMARY_CONFIRM:
             if call.data == 'YES':
                 logger.info(f'Confirmed hg summary: {SUMMARY[user_id]}')
-                bot.answer_callback_query(call.id)
+                bot_answer_callback_query(call.id)
                 respond_testimonies(user_id)
             elif call.data == 'NO':
                 respond_hg_summary(user_id, call.id)
         elif user_mode == TESTIMONIES:
             if call.data == 'YES':
-                bot.answer_callback_query(call.id)
+                bot_answer_callback_query(call.id)
                 respond_input_testimonies(user_id)
             elif call.data == 'NO':
-                bot.answer_callback_query(call.id)
+                bot_answer_callback_query(call.id)
                 respond_personal_meetings_feedback(user_id)
         elif user_mode == TESTIMONIES_CONFIRM:
             if call.data == 'YES':
-                bot.answer_callback_query(call.id)
+                bot_answer_callback_query(call.id)
                 respond_personal_meetings_feedback(user_id)
             elif call.data == 'NO':
-                bot.answer_callback_query(call.id)
+                bot_answer_callback_query(call.id)
                 respond_input_testimonies(user_id)
         elif user_mode == PERSONAL_MEETING:
             if call.data == 'YES':
-                bot.answer_callback_query(call.id)
+                bot_answer_callback_query(call.id)
                 respond_input_personal_meetings_feedback(user_id)
             elif call.data == 'NO':
-                bot.answer_callback_query(call.id)
+                bot_answer_callback_query(call.id)
                 respond_distributed_people(user_id)
         elif user_mode == PERSONAL_MEETING_CONFIRM:
             if call.data == 'YES':
-                bot.answer_callback_query(call.id)
+                bot_answer_callback_query(call.id)
                 respond_distributed_people(user_id)
             elif call.data == 'NO':
-                bot.answer_callback_query(call.id)
+                bot_answer_callback_query(call.id)
                 respond_input_personal_meetings_feedback(user_id)
         elif user_mode == DISTRIBUTED_PEOPLE:
             if call.data == 'YES':
-                bot.answer_callback_query(call.id)
+                bot_answer_callback_query(call.id)
                 respond_input_distributed_people(user_id)
             elif call.data == 'NO':
                 questions_df = get_questions_df(user_id)
                 db_access.save_questions_to_db(questions_df, ENGINE)
                 logger.info(f'Saved questions df: {questions_df}')
-                bot.answer_callback_query(call.id)
+                bot_answer_callback_query(call.id)
                 respond_finish(user_id)
         elif user_mode == DISTRIBUTED_PEOPLE_CONFIRM:
             if call.data == 'YES':
                 questions_df = get_questions_df(user_id)
                 db_access.save_questions_to_db(questions_df, ENGINE)
                 logger.info(f'Saved questions df: {questions_df}')
-                bot.answer_callback_query(call.id)
+                bot_answer_callback_query(call.id)
                 respond_finish(user_id)
             elif call.data == 'NO':
-                bot.answer_callback_query(call.id)
+                bot_answer_callback_query(call.id)
                 respond_input_distributed_people(user_id)
         elif user_mode == GROUP_DID_NOT_GATHER_CONFIRM:
             group_members = get_members(group_id)
             if call.data == 'YES':
-                bot.answer_callback_query(call.id)
+                bot_answer_callback_query(call.id)
                 for group_member in group_members:
                     VISITORS[user_id][group_member] = {'status': '-', 'leader': leader, 'reason': 'Группа не прошла'}
                 df = get_visitors_df(user_id)
@@ -608,7 +637,7 @@ def callback_query(call):
                 db_access.save_visitors_to_db(df, ENGINE)
                 respond_finish(user_id)
             elif call.data == 'NO':
-                bot.answer_callback_query(call.id)
+                bot_answer_callback_query(call.id)
                 respond_mark_visits(user_id, DATES[user_id], group_members)
         else:
             if call.data == 'REVIEW':
@@ -617,19 +646,19 @@ def callback_query(call):
             elif call.data == 'COMPLETE_VISITORS':
                 respond_complete(bot, group_id, user_id, call.id)
             elif call.data == 'GROUP_DID_NOT_GATHER':
-                respond_confirm_did_not_gather(user_id)
+                respond_confirm_did_not_gather(user_id, call.id)
             # should not fall here if wrong user mode
             elif call.data != "TITLE":
                 respond_visitor_selection(bot, leader, user_id, call.id, call.data)
     except IntegrityError as e:
         logger.error(e)
-        bot.answer_callback_query(call.id, 'Произошла ошибка. Нам очень жаль 😔')
-        bot.send_message(user_id, f'👺 Данные для группы {group_id} за дату {format_date(DATES[user_id])} уже были внесены',
+        bot_answer_callback_query(call.id, 'Произошла ошибка. Нам очень жаль 😔')
+        bot_send_message(user_id, f'👺 Данные для группы {group_id} за дату {format_date(DATES[user_id])} уже были внесены',
                          reply_markup=ReplyKeyboardRemove())
     except Exception as e:
         capture_exception(e)
         logger.exception(e)
-        bot.answer_callback_query(call.id, 'Произошла ошибка. Нам очень жаль 😔')
+        bot_answer_callback_query(call.id, 'Произошла ошибка. Нам очень жаль 😔')
 
 
 # Starting point of bot
@@ -648,7 +677,7 @@ def select_group(message):
         if len(group_ids) > 1:
             set_user_mode(user_id, SELECT_GROUP)
             groups_menu = get_groups_markup(group_ids)
-            bot.send_message(user_id, 'Привет! Выбери, пожалуйста, группу.', reply_markup=groups_menu)
+            bot_send_message(user_id, 'Привет! Выбери, пожалуйста, группу.', reply_markup=groups_menu)
         else:
             # if only one group is present, select it and go to select date
             respond_select_date(bot, user_id, username, group_ids[0])
@@ -670,7 +699,7 @@ def select_date(message):
             group_id = group_id[2:]  # remove emoji
         group_ids = map(lambda x: x['group_id'], user_info['hgs'])
         if not group_id in group_ids:
-            bot.reply_to(message, f'Ошибка в номере группы {group_id}, попробуй ввести еще раз')
+            bot_reply_to(message, f'Ошибка в номере группы {group_id}, попробуй ввести еще раз')
             return
         logger.info(f'Requested to work with group id {group_id}')
         respond_select_date(bot, user_id, username, group_id)
@@ -686,7 +715,7 @@ def process_reminders(message):
         logger.info('Starting reminders...')
         df = send_reminders.get_users_for_reminder()
         sent_to = send_reminders.process_reminders(df)
-        bot.reply_to(message, f'Разосланы напоминания лидерам: ' + ', '.join(sent_to))
+        bot_reply_to(message, f'Разосланы напоминания лидерам: ' + ', '.join(sent_to))
         logger.info(f'Sent reminders to {len(sent_to)} leaders')
     except Exception as e:
         logger.exception(e)
@@ -702,6 +731,9 @@ def handle_generic_messages(message):
         logger.info(f'[User {user_id} (@{username})] Handling inbound message. State = {user_mode}')
         logger.debug(f'Inbound message: {message.text}')
 
+        if not check_current_group_id(user_id):
+            bot_send_message(user_id, DATA_TOO_OLD_MESSAGE)
+            return
         group_id = get_current_group_id(user_id)
         group_info = get_group_info(user_info, group_id)
         leader = group_info['leader']
@@ -715,7 +747,7 @@ def handle_generic_messages(message):
                     respond_date_is_in_future(message)
                 else:
                     group_members = get_members(group_id)
-                    bot.send_message(user_id, f'Выбранная дата: {format_date(visit_date)}', reply_markup=ReplyKeyboardRemove())
+                    bot_send_message(user_id, f'Выбранная дата: {format_date(visit_date)}', reply_markup=ReplyKeyboardRemove())
                     DATES[user_id] = visit_date
                     respond_mark_visits(user_id, visit_date, group_members)
             else:
@@ -726,14 +758,14 @@ def handle_generic_messages(message):
             reason_for_db = list(filter(lambda reason: reason[1] == message.text, REASONS.values()))[0][0]
             VISITORS[user_id][ACTIVE_REASONS[user_id]]['reason'] = reason_for_db
             if group_members_checked(user_id):
-                bot.send_message(user_id, f'Отлично! Теперь нажми «Подтвердить отметки»')
+                bot_send_message(user_id, f'Отлично! Теперь нажми «Подтвердить отметки»')
             else:
                 bot.send_message(user_id, f'{ACTIVE_REASONS[user_id]}: {reason_for_db}\nПродолжай отмечать дальше.')
         elif user_mode == GUESTS:
             if len(message.text) > 32:
                 respond_guest_name_too_long(message)
             else:
-                bot.send_message(user_id, f'Добавлен гость {message.text}')
+                bot_send_message(user_id, f'Добавлен гость {message.text}')
                 add_guest_vist(user_id, leader, message.text)
         elif user_mode == HG_SUMMARY:
             add_summary(user_id, group_info, message.text)
