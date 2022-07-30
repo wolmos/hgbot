@@ -6,11 +6,11 @@ from loguru import logger
 from sqlalchemy import create_engine
 import babel.dates
 import random
-
-
-ENGINE = create_engine(f'postgresql://{config.db_user}:{config.db_password}@{config.db_hostname}:{config.db_port}/{config.db_name}?sslmode=require')
-
 import telebot
+
+ENGINE = create_engine(
+    f'postgresql://{config.db_user}:{config.db_password}@{config.db_hostname}:{config.db_port}/{config.db_name}?sslmode=require')
+
 bot = telebot.TeleBot(config.bot_token)
 
 
@@ -44,7 +44,7 @@ def process_reminders(to_remind_df):
         reminder_message = reminder_message_template.format(id_hg=id_hg, date_text=date_text)
         user_data = db_access.get_user_data(leader_username, ENGINE)
 
-        #if len(user_data) > 0 and f'@{leader_username}' in allowed_usernames:
+        # if len(user_data) > 0 and f'@{leader_username}' in allowed_usernames:
         if len(user_data) > 0:
             telegram_uid = user_data[0][1]
             try:
@@ -85,6 +85,10 @@ def send_reminder_before_after_hg(id_hg, message):
 def send_message(telegram_uid, reminder_message):
     logger.info(f'Sending reminder to {telegram_uid}: {reminder_message}')
     bot.send_message(telegram_uid, reminder_message)
+
+
+def send_message_fake(telegram_uid, reminder_message):
+    logger.info(f'Sending fake reminder to {telegram_uid}: {reminder_message}')
 
 
 def format_date(date):
