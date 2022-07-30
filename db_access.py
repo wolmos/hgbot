@@ -78,7 +78,7 @@ def get_master_data_for_today(engine):
     sql = "select g.id_hg as id_hg, max(m.status_of_hg) as status, max(m.type_age) as type_age, max(m.weekday) as weekday, max(m.time_of_hg) as time_of_hg " \
           f"from {USERNAMES_TABLE} g " \
           f"left join {MASTER_DATA_HISTORY_TABLE} m on g.id_hg = m.id_hg " \
-          "and m.valid_from <= now() and m.valid_to >= now() " \
+          "and m.valid_to >= now() and m.vacation is null " \
           "group by g.id_hg"
     return pd.read_sql(sql, engine)
 
