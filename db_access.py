@@ -54,7 +54,8 @@ def get_user_data(username, engine):
 
 
 def save_user_data(telegram_username, telegram_uid, engine):
-    engine.execute(f"INSERT INTO {USERS_TABLE} (telegram_username, telegram_uid) VALUES ('{telegram_username}', {telegram_uid}) ON CONFLICT (telegram_username) DO UPDATE SET telegram_uid = {telegram_uid}, updated_ts = now()")
+    engine.execute(
+        f"INSERT INTO {USERS_TABLE} (telegram_username, telegram_uid) VALUES ('{telegram_username}', {telegram_uid}) ON CONFLICT (telegram_username) DO UPDATE SET telegram_uid = {telegram_uid}, updated_ts = now()")
 
 
 def get_last_visits(engine):
@@ -67,7 +68,9 @@ def get_last_visits(engine):
 
 
 def get_leader_username_for_hg(id_hg, engine):
-    return list(engine.execute(f"SELECT replace(split_part(max(usernames), ',', 1), '@', '') as leader_username from {USERNAMES_TABLE} where id_hg='{id_hg}'"))[0][0]
+    return list(engine.execute(
+        f"SELECT replace(split_part(max(usernames), ',', 1), '@', '') as leader_username from {USERNAMES_TABLE} where id_hg='{id_hg}'"))[
+        0][0]
 
 
 def get_allowed_reminder_usernames(engine):
@@ -78,7 +81,7 @@ def get_master_data_for_today(engine):
     sql = "select g.id_hg as id_hg, max(m.status_of_hg) as status, max(m.type_age) as type_age, max(m.weekday) as weekday, max(m.time_of_hg) as time_of_hg " \
           f"from {USERNAMES_TABLE} g " \
           f"left join {MASTER_DATA_HISTORY_TABLE} m on g.id_hg = m.id_hg " \
-          "and m.valid_from <= now() and m.valid_to >= now() " \
+          "and m.valid_to >= now() and m.vacation is null " \
           "group by g.id_hg"
     return pd.read_sql(sql, engine)
 
@@ -93,5 +96,3 @@ def get_single_key_value(key, engine):
     if len(multi_key_value) != 1:
         raise ValueError(f"{len(multi_key_value)} enabled values found for key {key} (expected 1)")
     return multi_key_value[0]
-
-

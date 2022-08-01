@@ -46,26 +46,40 @@ class ReminderThread(threading.Thread):
         logger.info(f'Calculated times in UTC: {time_before_hg} {time_after_hg}')
 
         if weekday.lower() == 'понедельник':
-            schedule.every().sunday.at(time_before_hg).do(self.send_reminders_before_hg, id_hg=id_hg, time_of_hg=time_of_hg).tag('send_reminders_before_hg')
-            schedule.every().monday.at(time_after_hg).do(self.send_reminders_after_hg, id_hg=id_hg).tag('send_reminders_after_hg')
+            schedule.every().sunday.at(time_before_hg).do(self.send_reminders_before_hg, id_hg=id_hg,
+                                                          time_of_hg=time_of_hg).tag('send_reminders_before_hg')
+            schedule.every().monday.at(time_after_hg).do(self.send_reminders_after_hg, id_hg=id_hg).tag(
+                'send_reminders_after_hg')
         elif weekday.lower() == 'вторник':
-            schedule.every().monday.at(time_before_hg).do(self.send_reminders_before_hg, id_hg=id_hg, time_of_hg=time_of_hg).tag('send_reminders_before_hg')
-            schedule.every().tuesday.at(time_after_hg).do(self.send_reminders_after_hg, id_hg=id_hg).tag('send_reminders_after_hg')
+            schedule.every().monday.at(time_before_hg).do(self.send_reminders_before_hg, id_hg=id_hg,
+                                                          time_of_hg=time_of_hg).tag('send_reminders_before_hg')
+            schedule.every().tuesday.at(time_after_hg).do(self.send_reminders_after_hg, id_hg=id_hg).tag(
+                'send_reminders_after_hg')
         elif weekday.lower() == 'среда':
-            schedule.every().tuesday.at(time_before_hg).do(self.send_reminders_before_hg, id_hg=id_hg, time_of_hg=time_of_hg).tag('send_reminders_before_hg')
-            schedule.every().wednesday.at(time_after_hg).do(self.send_reminders_after_hg, id_hg=id_hg).tag('send_reminders_after_hg')
+            schedule.every().tuesday.at(time_before_hg).do(self.send_reminders_before_hg, id_hg=id_hg,
+                                                           time_of_hg=time_of_hg).tag('send_reminders_before_hg')
+            schedule.every().wednesday.at(time_after_hg).do(self.send_reminders_after_hg, id_hg=id_hg).tag(
+                'send_reminders_after_hg')
         elif weekday.lower() == 'четверг':
-            schedule.every().wednesday.at(time_before_hg).do(self.send_reminders_before_hg, id_hg=id_hg, time_of_hg=time_of_hg).tag('send_reminders_before_hg')
-            schedule.every().thursday.at(time_after_hg).do(self.send_reminders_after_hg, id_hg=id_hg).tag('send_reminders_after_hg')
+            schedule.every().wednesday.at(time_before_hg).do(self.send_reminders_before_hg, id_hg=id_hg,
+                                                             time_of_hg=time_of_hg).tag('send_reminders_before_hg')
+            schedule.every().thursday.at(time_after_hg).do(self.send_reminders_after_hg, id_hg=id_hg).tag(
+                'send_reminders_after_hg')
         elif weekday.lower() == 'пятница':
-            schedule.every().thursday.at(time_before_hg).do(self.send_reminders_before_hg, id_hg=id_hg, time_of_hg=time_of_hg).tag('send_reminders_before_hg')
-            schedule.every().friday.at(time_after_hg).do(self.send_reminders_after_hg, id_hg=id_hg).tag('send_reminders_after_hg')
+            schedule.every().thursday.at(time_before_hg).do(self.send_reminders_before_hg, id_hg=id_hg,
+                                                            time_of_hg=time_of_hg).tag('send_reminders_before_hg')
+            schedule.every().friday.at(time_after_hg).do(self.send_reminders_after_hg, id_hg=id_hg).tag(
+                'send_reminders_after_hg')
         elif weekday.lower() == 'суббота':
-            schedule.every().friday.at(time_before_hg).do(self.send_reminders_before_hg, id_hg=id_hg, time_of_hg=time_of_hg).tag('send_reminders_before_hg')
-            schedule.every().saturday.at(time_after_hg).do(self.send_reminders_after_hg, id_hg=id_hg).tag('send_reminders_after_hg')
+            schedule.every().friday.at(time_before_hg).do(self.send_reminders_before_hg, id_hg=id_hg,
+                                                          time_of_hg=time_of_hg).tag('send_reminders_before_hg')
+            schedule.every().saturday.at(time_after_hg).do(self.send_reminders_after_hg, id_hg=id_hg).tag(
+                'send_reminders_after_hg')
         elif weekday.lower() == 'воскресенье':
-            schedule.every().saturday.at(time_before_hg).do(self.send_reminders_before_hg, id_hg=id_hg, time_of_hg=time_of_hg).tag('send_reminders_before_hg')
-            schedule.every().sunday.at(time_after_hg).do(self.send_reminders_after_hg, id_hg=id_hg).tag('send_reminders_after_hg')
+            schedule.every().saturday.at(time_before_hg).do(self.send_reminders_before_hg, id_hg=id_hg,
+                                                            time_of_hg=time_of_hg).tag('send_reminders_before_hg')
+            schedule.every().sunday.at(time_after_hg).do(self.send_reminders_after_hg, id_hg=id_hg).tag(
+                'send_reminders_after_hg')
         else:
             logger.warning(f'Unexpected weekday: {weekday}')
 
@@ -79,7 +93,7 @@ class ReminderThread(threading.Thread):
 
     def send_reminders_before_hg(self, id_hg, time_of_hg):
         try:
-            logger.info(f'Reminder 24 hours before hg: {id_hg}')
+            logger.info(f'Reminder 2 hours before hg: {id_hg}')
             send_reminders.send_reminder_before_hg(id_hg, time_of_hg)
         except Exception as e:
             logger.exception(e)
@@ -90,5 +104,3 @@ class ReminderThread(threading.Thread):
             send_reminders.send_reminder_after_hg(id_hg)
         except Exception as e:
             logger.exception(e)
-
-
