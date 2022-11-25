@@ -29,12 +29,10 @@ class InterceptHandler(logging.Handler):
 
         logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
 
-
 # Intercepting log messages from third-party libs (e.g. Telebot) that have level INFO (20) or higher
 logging.basicConfig(handlers=[InterceptHandler()], level=20)
 
-logger.add("debug.log", format="{time} {level: <8} [{thread.name: <16}] {message}", level="DEBUG", rotation="3 MB",
-           compression="zip")
+logger.add("debug.log", format="{time} {level: <8} [{thread.name: <16}] {message}", level="DEBUG", rotation="3 MB", compression="zip")
 
 # States from certain range. States are kept in memory, lost if bot if restarted!
 USER_STATES = defaultdict(int)
@@ -62,12 +60,10 @@ DATA_TOO_OLD_MESSAGE = 'К сожалению, данные устарели �
 DATA_TOO_OLD_MESSAGE_SHORT = 'Пожалуйста, заполни отчет с начала'
 ADMINS_USERNAME = config.admins.split(",")
 
-ENGINE = create_engine(
-    f'postgresql://{config.db_user}:{config.db_password}@{config.db_hostname}:{config.db_port}/{config.db_name}?sslmode=require')
+ENGINE = create_engine(f'postgresql://{config.db_user}:{config.db_password}@{config.db_hostname}:{config.db_port}/{config.db_name}?sslmode=require')
 
 import telebot
-from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, \
-    ReplyKeyboardRemove
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 
 bot = telebot.TeleBot(config.bot_token)
 
@@ -93,6 +89,7 @@ def init():
     THANK_YOU_MESSAGES = db_access.get_multi_key_value('thank_you_message', ENGINE)
     FEEDBACK_MESSAGE = db_access.get_single_key_value('feedback_message', ENGINE)
     logger.info('Init finished')
+
 
 
 # ================MESSAGE SENDING================
@@ -126,13 +123,19 @@ def update_user_current_group(username, group_id):
 
 
 def check_user_group(message):
-    source_username = message.from_user.username
-    for username, user_info in USERS.items():
-        if source_username == username:
-            return user_info
-    bot_send_message(message.from_user.id, 'Привет! К сожалению, у тебя нет доступа')
-    logger.warning(f'The user @{source_username} does not have access')
-    return False
+    try:
+        source_username = message.from_user.username
+        for username, user_info in USERS.items():
+            if source_username == username:
+                return user_info
+        bot_send_message(message.from_user.id, 'Привет! К сожалению, у тебя нет доступа')
+        logger.warning(f'The user @{source_username} does not have access')
+        return False
+    except Exception as e:
+        logger.warning('Exception while checking user group!!')
+        capture_exception(e)
+        logger.exception(e)
+        return False
 
 
 def get_leader_members(username):
@@ -176,7 +179,6 @@ def parse_date(text):
             logger.error(e)
             return None
 
-
 def format_date(date):
     return babel.dates.format_date(date, 'd MMMM yyyy г.', 'ru')
 
@@ -187,7 +189,6 @@ def get_user_mode(user_id):
 
 def set_user_mode(user_id, mode):
     USER_STATES[user_id] = mode
-
 
 def check_user_admin(username):
     return username in ADMINS_USERNAME
@@ -389,13 +390,11 @@ def respond_select_date(bot, user_id, username, group_id):
 
 
 def respond_invalid_date_format(message):
-    bot_reply_to(message,
-                 'Я не понимаю, что это за дата 🤷\nПопробуй еще раз. Дата должна быть в формате ДД/ММ/ГГ (03/09/21)')
+    bot_reply_to(message, 'Я не понимаю, что это за дата 🤷\nПопробуй еще раз. Дата должна быть в формате ДД/ММ/ГГ (03/09/21)')
 
 
 def respond_guest_name_too_long(message):
-    bot_reply_to(message,
-                 f"К сожалению, имя гостя {message.text} слишком длинное, максимально можно ввести 32 символа 😐\nПопробуй сократить имя гостя и ввести его еще раз.")
+    bot_reply_to(message, f"К сожалению, имя гостя {message.text} слишком длинное, максимально можно ввести 32 символа 😐\nПопробуй сократить имя гостя и ввести его еще раз.")
 
 
 def respond_date_is_in_future(message):
@@ -404,9 +403,7 @@ def respond_date_is_in_future(message):
 
 def respond_mark_visits(user_id, visit_date, group_members):
     visit_menu = get_visit_markup(group_members)
-    bot_send_message(user_id,
-                     f'Отметь посещения за {format_date(visit_date)} (при присутствии нажми ✅, при отсутствии нажми 🚫 и выбери причину отсутствия). Если группа не состоялась, нажми «Группа не прошла».',
-                     reply_markup=visit_menu)
+    bot_send_message(user_id, f'Отметь посещения за {format_date(visit_date)} (при присутствии нажми ✅, при отсутствии нажми 🚫 и выбери причину отсутствия). Если группа не состоялась, нажми «Группа не прошла».', reply_markup=visit_menu)
     set_user_mode(user_id, MARK_VISITORS)
 
 
@@ -526,7 +523,6 @@ def respond_personal_meetings_feedback(user_id):
     personal_meeting_markup = get_distributed_people_markup()
     bot_send_message(user_id, 'Были ли личные встречи?', reply_markup=personal_meeting_markup)
 
-
 def respond_input_personal_meetings_feedback(user_id):
     set_user_mode(user_id, PERSONAL_MEETING_INPUT)
     bot_send_message(user_id, 'Расскажи, с кем были встречи')
@@ -572,11 +568,11 @@ def callback_query(call):
                 if guests_text != '':
                     bot_answer_callback_query(call.id)
                     bot_send_message(user_id, f'Гости добавлены:\n\n{guests_text}',
-                                     reply_markup=ReplyKeyboardRemove())
+                                    reply_markup=ReplyKeyboardRemove())
                 else:
                     bot_answer_callback_query(call.id)
                     bot_send_message(user_id, f'Гостей не было',
-                                     reply_markup=ReplyKeyboardRemove())
+                                    reply_markup=ReplyKeyboardRemove())
                 respond_hg_summary(user_id, call.id)
                 # cleanup(user_id)
             elif call.data != 'TITLE' and call.data != 'COMPLETE_VISITORS':
@@ -667,8 +663,7 @@ def callback_query(call):
     except IntegrityError as e:
         logger.error(e)
         bot_answer_callback_query(call.id, 'Произошла ошибка. Нам очень жаль 😔')
-        bot_send_message(user_id,
-                         f'👺 Данные для группы {group_id} за дату {format_date(DATES[user_id])} уже были внесены',
+        bot_send_message(user_id, f'👺 Данные для группы {group_id} за дату {format_date(DATES[user_id])} уже были внесены',
                          reply_markup=ReplyKeyboardRemove())
     except Exception as e:
         capture_exception(e)
@@ -728,7 +723,7 @@ def select_date(message):
 def process_reminders(message):
     try:
         username = message.from_user.username
-        if (check_user_admin(username)):
+        if(check_user_admin(username)):
             logger.info('Starting reminders...')
             df = send_reminders.get_users_for_reminder()
             sent_to = send_reminders.process_reminders(df)
@@ -737,18 +732,16 @@ def process_reminders(message):
     except Exception as e:
         logger.exception(e)
 
-
 @bot.message_handler(func=check_user_group, regexp='Обновить')
 def update_bot(message):
     try:
         username = message.from_user.username
-        if (check_user_admin(username)):
+        if(check_user_admin(username)):
             logger.info('Fetching data from DB')
             init()
             bot_reply_to(message, 'Данные из БД обновлены')
     except Exception as e:
         logger.exception(e)
-
 
 @bot.message_handler(func=check_user_group)
 def handle_generic_messages(message):
@@ -776,13 +769,12 @@ def handle_generic_messages(message):
                     respond_date_is_in_future(message)
                 else:
                     group_members = get_members(group_id)
-                    bot_send_message(user_id, f'Выбранная дата: {format_date(visit_date)}',
-                                     reply_markup=ReplyKeyboardRemove())
+                    bot_send_message(user_id, f'Выбранная дата: {format_date(visit_date)}', reply_markup=ReplyKeyboardRemove())
                     DATES[user_id] = visit_date
                     respond_mark_visits(user_id, visit_date, group_members)
             else:
                 respond_invalid_date_format(message)
-                # select_date(message)
+                #select_date(message)
 
         elif user_mode == MARK_VISITORS:
             reason_for_db = list(filter(lambda reason: reason[1] == message.text, REASONS.values()))[0][0]
