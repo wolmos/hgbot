@@ -1,12 +1,12 @@
 import pandas as pd
 
-VISITORS_TABLE = 'data_for_bot_visitors'
+VISITORS_TABLE = 'data_for_bot_visitors_view'
 USERNAMES_TABLE = 'data_for_bot_usernames'
 VISITS_TABLE = 'data_from_bot_visitors'
 QUESTIONS_TABLE = 'data_from_bot_questions'
 USERS_TABLE = 'data_from_bot_users'
 ALLOWED_REMINDER_USERNAMES_TABLE = 'allowed_reminder_usernames'
-MASTER_DATA_HISTORY_TABLE = 'master_data_history'
+MASTER_DATA_HISTORY_TABLE = 'master_data_history_view'
 KEY_VALUE_TABLE = 'key_value_storage'
 
 
@@ -81,7 +81,7 @@ def get_master_data_for_today(engine):
     sql = "select g.id_hg as id_hg, max(m.status_of_hg) as status, max(m.type_age) as type_age, max(m.weekday) as weekday, max(m.time_of_hg) as time_of_hg " \
           f"from {USERNAMES_TABLE} g " \
           f"left join {MASTER_DATA_HISTORY_TABLE} m on g.id_hg = m.id_hg " \
-          "and m.valid_to >= now() and m.vacation is null " \
+          "and m.status_of_hg = 'открыта' and m.vacation is false " \
           "group by g.id_hg"
     return pd.read_sql(sql, engine)
 
