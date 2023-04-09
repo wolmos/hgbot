@@ -16,7 +16,7 @@ bot = telebot.TeleBot(config.bot_token)
 
 def get_actual_master_data():
     df = db_access.get_master_data_for_today(ENGINE)
-    return df[df['status'] == 'открыта']
+    return df
 
 
 def get_users_for_reminder():
@@ -44,7 +44,6 @@ def process_reminders(to_remind_df):
         reminder_message = reminder_message_template.format(id_hg=id_hg, date_text=date_text)
         user_data = db_access.get_user_data(leader_username, ENGINE)
 
-        # if len(user_data) > 0 and f'@{leader_username}' in allowed_usernames:
         if len(user_data) > 0:
             telegram_uid = user_data[0][1]
             try:
@@ -71,10 +70,9 @@ def send_reminder_after_hg(id_hg):
 
 def send_reminder_before_after_hg(id_hg, message):
     leader_username = db_access.get_leader_username_for_hg(id_hg, ENGINE)
-    allowed_usernames = db_access.get_allowed_reminder_usernames(ENGINE)
     user_data = db_access.get_user_data(leader_username, ENGINE)
 
-    if leader_username is not None and len(user_data) > 0 and f'@{leader_username}' in allowed_usernames:
+    if leader_username is not None and len(user_data) > 0:
         telegram_uid = user_data[0][1]
         try:
             send_message(telegram_uid, message)
