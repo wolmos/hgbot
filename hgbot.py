@@ -80,6 +80,7 @@ GROUP_ICONS = ['🍏', '🍒', '🍉', '🍍', '🥥', '🍑', '🍇', '🫑', '
 
 # ================INITIALIZATION================
 
+reminder_thread = reminder_thread.ReminderThread()
 def init():
     global USERS, THANK_YOU_MESSAGES, FEEDBACK_MESSAGE
 
@@ -88,8 +89,8 @@ def init():
     logger.debug(f"Got {len(USERS)} users from DB")
     THANK_YOU_MESSAGES = db_access.get_multi_key_value('thank_you_message', ENGINE)
     FEEDBACK_MESSAGE = db_access.get_single_key_value('feedback_message', ENGINE)
+    reminder_thread.start()
     logger.info('Init finished')
-
 
 
 # ================MESSAGE SENDING================
@@ -122,12 +123,28 @@ def update_user_current_group(username, group_id):
     USER_CURRENT_GROUPS[username] = group_id
 
 
+def check_user_admin(message):
+    try:
+        source_username = message.from_user.username
+        for username in ADMINS_USERNAME:
+            if source_username == username:
+                return True
+        
+        logger.warning(f'The user @{source_username} does not have access')
+        return False
+    except Exception as e:
+        logger.warning('Exception while checking user group!!')
+        capture_exception(e)
+        logger.exception(e)
+        return False
+
 def check_user_group(message):
     try:
         source_username = message.from_user.username
         for username, user_info in USERS.items():
             if source_username == username:
                 return user_info
+
         bot_send_message(message.from_user.id, 'Привет! К сожалению, у тебя нет доступа')
         logger.warning(f'The user @{source_username} does not have access')
         return False
@@ -189,9 +206,6 @@ def get_user_mode(user_id):
 
 def set_user_mode(user_id, mode):
     USER_STATES[user_id] = mode
-
-def check_user_admin(username):
-    return username in ADMINS_USERNAME
 
 
 # ================MENUS================
@@ -719,27 +733,23 @@ def select_date(message):
         logger.exception(e)
 
 
-@bot.message_handler(func=check_user_group, regexp='Разослать напоминания')
+@bot.message_handler(func=check_user_admin, regexp='Разослать напоминания')
 def process_reminders(message):
     try:
-        username = message.from_user.username
-        if(check_user_admin(username)):
-            logger.info('Starting reminders...')
-            df = send_reminders.get_users_for_reminder()
-            sent_to = send_reminders.process_reminders(df)
-            bot_reply_to(message, f'Разосланы напоминания лидерам: ' + ', '.join(sent_to))
-            logger.info(f'Sent reminders to {len(sent_to)} leaders')
+        logger.info('Starting reminders...')
+        df = send_reminders.get_users_for_reminder()
+        sent_to = send_reminders.process_reminders(df)
+        bot_reply_to(message, f'Разосланы напоминания лидерам: ' + ', '.join(sent_to))
+        logger.info(f'Sent reminders to {len(sent_to)} leaders')
     except Exception as e:
         logger.exception(e)
 
-@bot.message_handler(func=check_user_group, regexp='Обновить')
+@bot.message_handler(func=check_user_admin, regexp='Обновить')
 def update_bot(message):
     try:
-        username = message.from_user.username
-        if(check_user_admin(username)):
-            logger.info('Fetching data from DB')
-            init()
-            bot_reply_to(message, 'Данные из БД обновлены')
+        logger.info('Fetching data from DB')
+        init()
+        bot_reply_to(message, 'Данные из БД обновлены')
     except Exception as e:
         logger.exception(e)
 
@@ -807,8 +817,4 @@ def handle_generic_messages(message):
 
 
 init()
-
-reminder_thread = reminder_thread.ReminderThread()
-reminder_thread.start()
-
 bot.polling()
