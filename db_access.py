@@ -5,8 +5,7 @@ USERNAMES_TABLE = 'data_for_bot_usernames'
 VISITS_TABLE = 'data_from_bot_visitors'
 QUESTIONS_TABLE = 'data_from_bot_questions'
 USERS_TABLE = 'data_from_bot_users'
-ALLOWED_REMINDER_USERNAMES_TABLE = 'allowed_reminder_usernames'
-MASTER_DATA_HISTORY_TABLE = 'master_data_history_view'
+MASTER_DATA_HISTORY_VIEW = 'master_data_history_view'
 KEY_VALUE_TABLE = 'key_value_storage'
 
 
@@ -73,14 +72,10 @@ def get_leader_username_for_hg(id_hg, engine):
         0][0]
 
 
-def get_allowed_reminder_usernames(engine):
-    return [m[0] for m in list(engine.execute(f"SELECT telegram_username FROM {ALLOWED_REMINDER_USERNAMES_TABLE}"))]
-
-
 def get_master_data_for_today(engine):
     sql = "select g.id_hg as id_hg, max(m.status_of_hg) as status, max(m.type_age) as type_age, max(m.weekday) as weekday, max(m.time_of_hg) as time_of_hg " \
           f"from {USERNAMES_TABLE} g " \
-          f"left join {MASTER_DATA_HISTORY_TABLE} m on g.id_hg = m.id_hg " \
+          f"left join {MASTER_DATA_HISTORY_VIEW} m on g.id_hg = m.name " \
           "and m.status_of_hg = 'открыта' and m.vacation = 'false' " \
           "group by g.id_hg"
     return pd.read_sql(sql, engine)
