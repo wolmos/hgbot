@@ -80,7 +80,6 @@ GROUP_ICONS = ['🍏', '🍒', '🍉', '🍍', '🥥', '🍑', '🍇', '🫑', '
 
 # ================INITIALIZATION================
 
-reminder_thread = reminder_thread.ReminderThread()
 def init():
     global USERS, THANK_YOU_MESSAGES, FEEDBACK_MESSAGE
 
@@ -89,7 +88,6 @@ def init():
     logger.debug(f"Got {len(USERS)} users from DB")
     THANK_YOU_MESSAGES = db_access.get_multi_key_value('thank_you_message', ENGINE)
     FEEDBACK_MESSAGE = db_access.get_single_key_value('feedback_message', ENGINE)
-    reminder_thread.start()
     logger.info('Init finished')
 
 
@@ -817,4 +815,6 @@ def handle_generic_messages(message):
 
 
 init()
+reminder_thread = reminder_thread.ReminderThread()
+reminder_thread.start()
 bot.polling()
