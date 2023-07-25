@@ -29,7 +29,7 @@ class ReminderThread(threading.Thread):
         for i, row in master_data_df.iterrows():
             weekday = row['weekday']
             time_of_hg = row['time_of_hg']
-            id_hg = row['id_hg']
+            id_hg = row['name'] #name = id_hg (косяк во вьюхе)
             self.try_init_reminder_for_today(weekday, time_of_hg, id_hg)
 
     def try_init_reminder_for_today(self, weekday, time_of_hg, id_hg):
@@ -87,7 +87,7 @@ class ReminderThread(threading.Thread):
         try:
             logger.info(f'Executing check_old_hgs')
             df = send_reminders.get_users_for_reminder()
-            sent_to = send_reminders.process_reminders(df)
+            send_reminders.process_reminders(df)
         except Exception as e:
             logger.exception(e)
 

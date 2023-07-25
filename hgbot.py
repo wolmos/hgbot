@@ -157,16 +157,16 @@ def check_user_group(message):
 
 def get_leader_members(username):
     group_id = USER_CURRENT_GROUPS[username]
-    if group_id in MEMBERS:
-        return MEMBERS[group_id]
+    #if group_id in MEMBERS:
+    #   return MEMBERS[group_id]
     members = db_access.select_group_members(group_id, ENGINE)
     MEMBERS[group_id] = members
     return members
 
 
 def get_members(group_id):
-    if group_id in MEMBERS:
-        return MEMBERS[group_id]
+    #if group_id in MEMBERS:
+    #    return MEMBERS[group_id]
     members = db_access.select_group_members(group_id, ENGINE)
     MEMBERS[group_id] = members
     return members
