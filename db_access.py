@@ -75,7 +75,7 @@ def get_leader_username_for_hg(id_hg, engine):
 def get_master_data_for_today(engine):
     sql = "select g.id_hg as id_hg, max(m.status_of_hg) as status, max(m.type_age) as type_age, max(m.weekday) as weekday, max(m.time_of_hg) as time_of_hg " \
           f"from {USERNAMES_TABLE} g " \
-          f"left join {MASTER_DATA_HISTORY_VIEW} m on g.id_hg = m.name " \
+          f"inner join {MASTER_DATA_HISTORY_VIEW} m on g.id_hg = m.name " \
           "and m.status_of_hg = 'открыта' and m.vacation = 'false' " \
           "group by g.id_hg"
     return pd.read_sql(sql, engine)
