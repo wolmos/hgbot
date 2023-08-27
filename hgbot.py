@@ -717,9 +717,9 @@ def select_date(message):
         username = user_info['username']
         logger.info(f'[User {user_id} (@{username})] Select Date')
         update_user_id(username, user_id)
-        group_id = message.text.replace('Группа: ', '')
-        if group_id[0] in GROUP_ICONS and group_id[1] == ' ':
-            group_id = group_id[2:]  # remove emoji
+        group_id = message.text.split(' ')[:3]
+        if group_id[0] in GROUP_ICONS and group_id[1] == 'Группа:':
+            group_id = group_id[2]  # remove emoji
         group_ids = map(lambda x: x['group_id'], user_info['hgs'])
         if not group_id in group_ids:
             bot_reply_to(message, f'Ошибка в номере группы {group_id}, попробуй ввести еще раз')
