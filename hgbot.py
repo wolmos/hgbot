@@ -696,9 +696,10 @@ def select_group(message):
         update_user_id(username, user_id)
         logger.info(f'User groups: {user_info["hgs"]}')
         group_ids = list(map(lambda x: x['group_id'], user_info['hgs']))
+        group_list = list(map(lambda x: f"{x['group_id']} {x['leader']}", user_info['hgs']))
         if len(group_ids) > 1:
             set_user_mode(user_id, SELECT_GROUP)
-            groups_menu = get_groups_markup(group_ids)
+            groups_menu = get_groups_markup(group_list)
             bot_send_message(user_id, 'Привет! Выбери, пожалуйста, группу.', reply_markup=groups_menu)
         else:
             # if only one group is present, select it and go to select date
