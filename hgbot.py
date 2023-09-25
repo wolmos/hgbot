@@ -56,8 +56,8 @@ PERSONAL_MEETINGS_FEEDBACK = defaultdict(None)
 
 THANK_YOU_MESSAGES = ['Спасибо тебе!']  # just in case if nothing found in the DB
 FEEDBACK_MESSAGE = ''
-DATA_TOO_OLD_MESSAGE = 'К сожалению, данные устарели 😔 Пожалуйста, заполни отчет с начала.'
-DATA_TOO_OLD_MESSAGE_SHORT = 'Пожалуйста, заполни отчет с начала'
+DATA_TOO_OLD_MESSAGE = 'К сожалению, данные устарели 😔 Пожалуйста, заполните отчет с начала.'
+DATA_TOO_OLD_MESSAGE_SHORT = 'Пожалуйста, заполните отчет с начала'
 ADMINS_USERNAME = config.admins.split(",")
 
 ENGINE = create_engine(f'postgresql://{config.db_user}:{config.db_password}@{config.db_hostname}:{config.db_port}/{config.db_name}?sslmode=require')
@@ -397,25 +397,25 @@ def respond_select_date(bot, user_id, username, group_id):
     dates_menu = get_dates_markup()
     set_user_mode(user_id, DATE)
     bot_send_message(user_id,
-                     f'Привет! Ты — {group_info["leader"]}, лидер группы {group_info["group_id"]}. '
+                     f'Привет! Вы — {group_info["leader"]}, лидер группы {group_info["group_id"]}. '
                      'Выбери дату из списка или отправь дату в формате ДД/ММ/ГГ (03/09/21)', reply_markup=dates_menu)
 
 
 def respond_invalid_date_format(message):
-    bot_reply_to(message, 'Я не понимаю, что это за дата 🤷\nПопробуй еще раз. Дата должна быть в формате ДД/ММ/ГГ (03/09/21)')
+    bot_reply_to(message, 'Я не понимаю, что это за дата 🤷\nПопробуйте еще раз. Дата должна быть в формате ДД/ММ/ГГ (03/09/21)')
 
 
 def respond_guest_name_too_long(message):
-    bot_reply_to(message, f"К сожалению, имя гостя {message.text} слишком длинное, максимально можно ввести 32 символа 😐\nПопробуй сократить имя гостя и ввести его еще раз.")
+    bot_reply_to(message, f"К сожалению, имя гостя {message.text} слишком длинное, максимально можно ввести 32 символа 😐\nПопробуйте сократить имя гостя и ввести его еще раз.")
 
 
 def respond_date_is_in_future(message):
-    bot_reply_to(message, 'Нельзя указать дату в будущем, попробуй ввести еще раз')
+    bot_reply_to(message, 'Нельзя указать дату в будущем, попробуйте ввести еще раз')
 
 
 def respond_mark_visits(user_id, visit_date, group_members):
     visit_menu = get_visit_markup(group_members)
-    bot_send_message(user_id, f'Отметь посещения за {format_date(visit_date)} (при присутствии нажми ✅, при отсутствии нажми 🚫 и выбери причину отсутствия). Если группа не состоялась, нажми «Группа не прошла».', reply_markup=visit_menu)
+    bot_send_message(user_id, f'Отметьте посещения за {format_date(visit_date)} (при присутствии нажми ✅, при отсутствии нажми 🚫 и выбери причину отсутствия). Если группа не состоялась, нажмите «Группа не прошла».', reply_markup=visit_menu)
     set_user_mode(user_id, MARK_VISITORS)
 
 
@@ -446,7 +446,7 @@ def respond_complete(bot, group_id, user_id, call_id):
     guests = db_access.get_group_guests(group_id, ENGINE)
     guests_markup = get_guests_markup(guests)
     bot_send_message(user_id,
-                     'Переходим к добавлению гостей. Отправь в отдельных сообщениях имена новых гостей или выбери повторно посетивших из списка. Затем нажми «Завершить добавление гостей»',
+                     'Переходим к добавлению гостей. Отправьте в отдельных сообщениях имена новых гостей или выберите повторно посетивших из списка. Затем нажмите «Завершить добавление гостей»',
                      reply_markup=guests_markup)
     bot_answer_callback_query(call_id)
 
@@ -456,18 +456,18 @@ def respond_visitor_selection(bot, leader, user_id, call_id, call_data):
     logger.info(f'Got them {name}')
     if ': -' in call_data:
         VISITORS[user_id][name] = {'status': '-', 'leader': leader}
-        bot_answer_callback_query(call_id, 'Укажи причину отсутствия')
+        bot_answer_callback_query(call_id, 'Укажите причину отсутствия')
         reasons_menu = get_reasons_markup()
         ACTIVE_REASONS[user_id] = name
-        bot_send_message(user_id, f'Укажи причину отсутствия {name}',
+        bot_send_message(user_id, f'Укажите причину отсутствия {name}',
                          reply_markup=reasons_menu)
     else:
         bot_answer_callback_query(call_id, call_data)
         VISITORS[user_id][name] = {'status': '+', 'leader': leader}
         if group_members_checked(user_id):
-            bot_send_message(user_id, f'Отлично! Теперь нажми «Подтвердить отметки»')
+            bot_send_message(user_id, f'Отлично! Теперь нажмите «Подтвердить отметки»')
         else:
-            bot_send_message(user_id, f'{name}: ✅\nПродолжай отмечать дальше.')
+            bot_send_message(user_id, f'{name}: ✅\nПродолжайте отмечать дальше.')
 
 
 def respond_confirm_did_not_gather(user_id, call_id):
@@ -480,7 +480,7 @@ def respond_confirm_did_not_gather(user_id, call_id):
 
 def respond_hg_summary(user_id, call_id):
     set_user_mode(user_id, HG_SUMMARY)
-    bot_send_message(user_id, 'Опиши, о чем была духовная часть (3–4 тезиса)', reply_markup=ReplyKeyboardRemove())
+    bot_send_message(user_id, 'Опишите, о чем была духовная часть (3–4 тезиса)', reply_markup=ReplyKeyboardRemove())
     bot_answer_callback_query(call_id)
 
 
@@ -496,13 +496,13 @@ def respond_distributed_people(user_id):
     set_user_mode(user_id, DISTRIBUTED_PEOPLE)
     distributed_people_markup = get_distributed_people_markup()
     bot_send_message(user_id,
-                     'Есть ли у тебя на домашней группе люди, которых тебе передали в течение последнего месяца?',
+                     'Есть ли у вас на домашней группе люди, которых вам передали в течение последнего месяца?',
                      reply_markup=distributed_people_markup)
 
 
 def respond_input_distributed_people(user_id):
     set_user_mode(user_id, DISTRIBUTED_PEOPLE_INPUT)
-    bot_send_message(user_id, 'Опиши, пожалуйста, ситуацию вкратце')
+    bot_send_message(user_id, 'Опишите, пожалуйста, ситуацию вкратце')
 
 
 def respond_confirm_distributed_people(user_id):
@@ -520,7 +520,7 @@ def respond_testimonies(user_id):
 
 def respond_input_testimonies(user_id):
     set_user_mode(user_id, TESTIMONIES_INPUT)
-    bot_send_message(user_id, 'Опиши, какие были свидетельства (например, Иванов Иван: Молились за исцеление...)')
+    bot_send_message(user_id, 'Опишите, какие были свидетельства (например, Иванов Иван: Молились за исцеление...)')
 
 
 def respond_confirm_testimonies(user_id):
@@ -537,7 +537,7 @@ def respond_personal_meetings_feedback(user_id):
 
 def respond_input_personal_meetings_feedback(user_id):
     set_user_mode(user_id, PERSONAL_MEETING_INPUT)
-    bot_send_message(user_id, 'Расскажи, с кем были встречи')
+    bot_send_message(user_id, 'Расскажите, с кем были встречи')
 
 
 def respond_confirm_personal_meetings_feedback(user_id):
@@ -700,7 +700,7 @@ def select_group(message):
         if len(group_ids) > 1:
             set_user_mode(user_id, SELECT_GROUP)
             groups_menu = get_groups_markup(group_list)
-            bot_send_message(user_id, 'Привет! Выбери, пожалуйста, группу.', reply_markup=groups_menu)
+            bot_send_message(user_id, 'Привет! Выберите, пожалуйста, группу.', reply_markup=groups_menu)
         else:
             # if only one group is present, select it and go to select date
             respond_select_date(bot, user_id, username, group_ids[0])
@@ -722,7 +722,7 @@ def select_date(message):
             group_id = group_id[2]  # remove emoji
         group_ids = map(lambda x: x['group_id'], user_info['hgs'])
         if not group_id in group_ids:
-            bot_reply_to(message, f'Ошибка в номере группы {group_id}, попробуй ввести еще раз')
+            bot_reply_to(message, f'Ошибка в номере группы {group_id}, попробуйте ввести еще раз')
             return
         logger.info(f'Requested to work with group id {group_id}')
         respond_select_date(bot, user_id, username, group_id)
@@ -789,9 +789,9 @@ def handle_generic_messages(message):
             reason_for_db = list(filter(lambda reason: reason[1] == message.text, REASONS.values()))[0][0]
             VISITORS[user_id][ACTIVE_REASONS[user_id]]['reason'] = reason_for_db
             if group_members_checked(user_id):
-                bot_send_message(user_id, f'Отлично! Теперь нажми «Подтвердить отметки»')
+                bot_send_message(user_id, f'Отлично! Теперь нажмите «Подтвердить отметки»')
             else:
-                bot.send_message(user_id, f'{ACTIVE_REASONS[user_id]}: {reason_for_db}\nПродолжай отмечать дальше.')
+                bot.send_message(user_id, f'{ACTIVE_REASONS[user_id]}: {reason_for_db}\nПродолжайте отмечать дальше.')
         elif user_mode == GUESTS:
             if len(message.text) > 32:
                 respond_guest_name_too_long(message)
