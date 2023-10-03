@@ -23,7 +23,7 @@ def get_users_for_reminder():
     df_last_visits = db_access.get_last_visits(ENGINE)
     df_master_data = get_actual_master_data()
     df_all = pd.merge(df_last_visits, df_master_data, on='id_hg')
-    to_remind = df_all[df_all['max_date'] < date.today() - timedelta(days=date.today().weekday() + 7)]
+    to_remind = df_all[(df_all['max_date'] < date.today() - timedelta(days=date.today().weekday() + 7)) | (pd.isnull(df_all['max_date']))]
     return to_remind
 
 

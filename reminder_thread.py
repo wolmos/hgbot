@@ -28,7 +28,7 @@ class ReminderThread(threading.Thread):
         master_data_df = send_reminders.get_actual_master_data()
         for i, row in master_data_df.iterrows():
             weekday = row['weekday']
-            time_of_hg = row['time_of_hg']
+            time_of_hg = str(row['time_of_hg'])
             id_hg = row['id_hg']
             self.try_init_reminder_for_today(weekday, time_of_hg, id_hg)
 

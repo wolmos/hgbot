@@ -28,7 +28,7 @@ def get_time_with_offset(time_str, offset_secs):
 
 def parse_time(time_str):
     try:
-        parsed = time.strptime(time_str, '%H:%M')
+        parsed = time.strptime(time_str, '%H:%M:%S')
         if time.mktime(parsed) < min_hg_time:
             logger.warning(f'hg starts too early: {time_str}')
             return None
